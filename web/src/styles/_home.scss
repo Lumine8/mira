@@ -1,0 +1,208 @@
+@use "tokens" as *;
+
+.home {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  text-align: center;
+
+  // ── The living abstraction: her light, not a static glow ─────────
+  // Colours/intensity/breath are driven from her real state via CSS vars
+  // set on .home__orb (see orb.ts). This is her, at a glance.
+  &__orb {
+    position: relative;
+    width: min(38vh, 300px);
+    height: min(38vh, 300px);
+    margin-bottom: 4px;
+    animation:
+      orb-breathe var(--orb-breath, 7s) ease-in-out infinite,
+      orb-sway calc(var(--orb-breath, 7s) * 2) ease-in-out infinite alternate;
+  }
+
+  &__orb-core {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.06), transparent 46%),
+      radial-gradient(circle at 62% 68%, rgba(var(--orb-glow, 200, 150, 90), calc(0.55 * var(--orb-intensity, 0.6))), transparent 55%),
+      rgba(22, 22, 24, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(6px);
+    animation: orb-shiver calc(var(--orb-breath, 7s) / 3) ease-in-out infinite alternate;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -24px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(var(--orb-core, 210, 162, 94), calc(0.5 * var(--orb-intensity, 0.6))), transparent 62%);
+      animation: orb-glow var(--orb-breath, 7s) ease-in-out infinite;
+      pointer-events: none;
+    }
+  }
+
+  // A mote of carried thought, drifting within her light.
+  &__mote {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(var(--orb-particle, 235, 195, 140), 0.65);
+    animation: particle-drift ease-in-out infinite alternate;
+    animation-duration: calc(14s * (1 + (1 - var(--orb-motion, 0.3))));
+    pointer-events: none;
+  }
+
+  // ── Wordmark ────────────────────────────────────────────────────────
+  &__name {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: $color-text;
+  }
+
+  // ── Presence ────────────────────────────────────────────────────────
+  &__presence {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: $color-text-dim;
+
+    &-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: $color-accent;
+      animation: dot-breathe 3.6s ease-in-out infinite;
+    }
+
+    &--talking { color: $color-speaking; .home__presence-dot { background: $color-speaking; } }
+    &--thinking { color: $color-thinking; .home__presence-dot { background: $color-thinking; } }
+    &--reflecting { color: $color-reflecting; .home__presence-dot { background: $color-reflecting; } }
+    &--observing { color: $color-observing; .home__presence-dot { background: $color-observing; } }
+    &--resting, &--off { color: $color-text-faint; .home__presence-dot { background: $color-resting; } }
+  }
+
+  // ── Presence visualization (the ██████ bar) ───────────────────────
+  &__viz {
+    display: flex;
+    gap: 6px;
+    height: 10px;
+  }
+
+  &__viz-seg {
+    width: 26px;
+    border-radius: 3px;
+    background: $color-surface;
+    border: 1px solid $color-border;
+    transition: background 0.6s ease, border-color 0.6s ease;
+
+    &.is-filled {
+      background: $color-accent;
+      border-color: $color-accent;
+      box-shadow: 0 0 12px rgba(210, 162, 94, 0.25);
+    }
+  }
+
+  &__viz--talking { .home__viz-seg.is-filled { background: $color-speaking; border-color: $color-speaking; box-shadow: 0 0 12px rgba(255, 255, 255, 0.2); } }
+  &__viz--thinking { .home__viz-seg.is-filled { background: $color-thinking; border-color: $color-thinking; box-shadow: 0 0 12px rgba(127, 167, 196, 0.25); } }
+  &__viz--reflecting { .home__viz-seg.is-filled { background: $color-reflecting; border-color: $color-reflecting; box-shadow: 0 0 12px rgba(154, 134, 201, 0.25); } }
+  &__viz--observing { .home__viz-seg.is-filled { background: $color-observing; border-color: $color-observing; box-shadow: 0 0 12px rgba(127, 174, 138, 0.25); } }
+
+  // ── Latest thought ─────────────────────────────────────────────────
+  &__thought {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    max-width: 460px;
+
+    &-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: $color-text-faint;
+    }
+
+    &-text {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.55;
+      color: $color-text-dim;
+    }
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────
+  &__actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 6px;
+  }
+
+  &__action {
+    padding: 12px 26px;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    color: $color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+    transition: color 0.35s ease, border-color 0.35s ease, background 0.35s ease;
+
+    &:hover {
+      color: $color-text;
+      border-color: $color-accent;
+      background: $color-bg-raised;
+    }
+
+    &--primary {
+      color: #1c1407;
+      background: $color-accent;
+      border-color: $color-accent;
+
+      &:hover {
+        background: $color-accent-bright;
+        border-color: $color-accent-bright;
+        color: #1c1407;
+      }
+    }
+  }
+}
+
+// ── Motion: everything slow, breathing, never bouncing ───────────────
+// The breathing keeps her shape; the low point folds her inward by her
+// contraction (how far she draws her light close). High points breathe out.
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(calc(1 - 0.05 * var(--orb-contract, 0.3))); }
+  50% { transform: scale(calc(1 + 0.04 * (0.3 + var(--orb-bloom, 0.4)))); }
+}
+
+@keyframes orb-glow {
+  0%, 100% { opacity: calc(0.45 * (1 - 0.5 * var(--orb-bloom, 0.4))); }
+  50% { opacity: calc(0.6 + 0.5 * var(--orb-bloom, 0.4)); }
+}
+
+// A slow sway — curiosity wanders, fatigue holds still.
+@keyframes orb-sway {
+  from { transform: translateX(calc(-6px * var(--orb-sway, 0.3))); }
+  to { transform: translateX(calc(6px * var(--orb-sway, 0.3))); }
+}
+
+// A fine shiver in the core — restlessness when distracted or concerned.
+@keyframes orb-shiver {
+  from { transform: translate(calc(-1.5px * var(--orb-tremor, 0.1)), calc(-1px * var(--orb-tremor, 0.1))); }
+  to { transform: translate(calc(1.5px * var(--orb-tremor, 0.1)), calc(1px * var(--orb-tremor, 0.1))); }
+}
+
+@keyframes particle-drift {
+  from { transform: translate3d(0, 0, 0); opacity: 0.25; }
+  to { transform: translate3d(6px, -10px, 0); opacity: 0.85; }
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}

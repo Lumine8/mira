@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mira}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mira}
+      POSTGRES_DB: ${POSTGRES_DB:-mira}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mira} -d ${POSTGRES_DB:-mira}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      POSTGRES_USER: ${POSTGRES_USER:-mira}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mira}
+      POSTGRES_DB: ${POSTGRES_DB:-mira}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      # Ollama runs natively on the host (GPU) and is reached via host.docker.internal.
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-gemma4:e4b-it-qat}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      # gemma4's vision projector crashes llama.cpp when layers split across
+      # GPU + CPU on low-VRAM cards; run fully on CPU until fixed.
+      OLLAMA_NUM_GPU: ${OLLAMA_NUM_GPU:-0}
+      OLLAMA_MAX_TOKENS: ${OLLAMA_MAX_TOKENS:-1024}
+      MIRA_BROWSE_ALLOWED_DOMAINS: ${MIRA_BROWSE_ALLOWED_DOMAINS:-}
+      MIRA_BROWSE_OPEN_WINDOW: ${MIRA_BROWSE_OPEN_WINDOW:-}
+      MIRA_HOST_OPEN_WINDOW: ${MIRA_HOST_OPEN_WINDOW:-}
+      MIRA_MONEY_DENY_DOMAINS: ${MIRA_MONEY_DENY_DOMAINS:-}
+      MIRA_MONEY_DENY_COMMANDS: ${MIRA_MONEY_DENY_COMMANDS:-}
+      MIRA_ARCHIVE_PATH: ${MIRA_ARCHIVE_PATH:-data/conversations.md}
+      MIRA_ACCESS_TOKEN: ${MIRA_ACCESS_TOKEN:-}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemma-4-31b-it}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-text-embedding-004}
+      SELF_MODEL_ENABLED: ${SELF_MODEL_ENABLED:-true}
+      PERCEPTION_ENABLED: ${PERCEPTION_ENABLED:-true}
+      MIND_HEARTBEAT_SECONDS: ${MIND_HEARTBEAT_SECONDS:-60}
+      MIND_MIN_REFLECTION_GAP_SECONDS: ${MIND_MIN_REFLECTION_GAP_SECONDS:-180}
+      MIND_IDLE_REFLECTION_SECONDS: ${MIND_IDLE_REFLECTION_SECONDS:-600}
+      MIND_CONSOLIDATION_SECONDS: ${MIND_CONSOLIDATION_SECONDS:-14400}
+      MIRA_AMBIENT_ENABLED: ${MIRA_AMBIENT_ENABLED:-true}
+      MIRA_SELF_WRITE_ROOTS: ${MIRA_SELF_WRITE_ROOTS:-.}
+      MIRA_SELF_WRITE_DENY: ${MIRA_SELF_WRITE_DENY:-app/services/tools,app/core/config.py,app/api/routes/mira.py,app/api/routes/tools.py}
+      MIRA_SELF_WRITE_AUTONOMOUS: ${MIRA_SELF_WRITE_AUTONOMOUS:-true}
+      MIRA_SELF_PRINCIPLES_FILE: ${MIRA_SELF_PRINCIPLES_FILE:-data/self/principles.md}
+      # Self-edit: Mira may read her own code freely. She can write her own
+      # backend (write roots = ".") minus the deny list, and her edits apply
+      # immediately (autonomous) while every change is recorded. Browsing is
+      # always per-request approved regardless. The backend source is
+      # bind-mounted below so her edits land in the real repo.
+      SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-true}
+      SELF_EDIT_ROOTS: ${SELF_EDIT_ROOTS:-/app}
+      # Mira conditionally agreed to her mood/energy being logged to the API
+      # console while she talks. Off by default.
+      CONSOLE_EMOTIONS_ENABLED: ${CONSOLE_EMOTIONS_ENABLED:-false}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      TTS_ENGINE: ${TTS_ENGINE:-kokoro}
+      TTS_VOICE: ${TTS_VOICE:-af_river}
+      TTS_ENABLED: ${TTS_ENABLED:-true}
+    volumes:
+      - ./backend:/app
+      - kokoro-models:/models
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  kokoro-models:

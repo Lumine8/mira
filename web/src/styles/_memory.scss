@@ -1,0 +1,233 @@
+@use "tokens" as *;
+
+.memory {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  height: min(640px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  background: $color-bg-raised;
+  border: 1px solid $color-border;
+  border-radius: $radius-lg;
+  box-shadow: $glow-accent;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid $color-border;
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      flex: 1;
+    }
+  }
+
+  &__back {
+    font-size: 14px;
+    color: $color-text-dim;
+    padding: 4px 8px;
+    border-radius: $radius-sm;
+
+    &:hover {
+      color: $color-text;
+      background: $color-surface;
+    }
+  }
+
+  &__error {
+    padding: 10px 20px;
+    font-size: 13px;
+    color: $color-hangup;
+    background: rgba(224, 99, 122, 0.08);
+    border-bottom: 1px solid $color-border;
+  }
+
+  &__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.memory-card {
+  padding: 14px 16px;
+  border-radius: $radius-md;
+  background: $color-surface;
+  border: 1px solid $color-border;
+
+  &__title {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: $color-text-faint;
+  }
+}
+
+.memory-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+
+  &__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: $radius-sm;
+    background: $color-bg-raised;
+  }
+
+  &__key {
+    font-size: 11px;
+    color: $color-text-faint;
+  }
+
+  &__value {
+    font-size: 14px;
+    font-weight: 600;
+    color: $color-text;
+  }
+}
+
+.memory-quote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: $color-accent-bright;
+  font-style: italic;
+  border-left: 2px solid $color-accent;
+  padding-left: 10px;
+}
+
+.memory-line {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: $color-text-dim;
+}
+
+.memory-empty {
+  margin: 4px 0;
+  font-size: 13px;
+  color: $color-text-faint;
+}
+
+.memory-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: $color-text-dim;
+
+  li + li {
+    margin-top: 4px;
+  }
+
+  &--memories {
+    list-style: none;
+    padding-left: 0;
+  }
+}
+
+.memory-item {
+  padding: 10px 12px;
+  border-radius: $radius-sm;
+  background: $color-bg-raised;
+  border: 1px solid transparent;
+
+  &:hover {
+    border-color: $color-border;
+  }
+
+  & + & {
+    margin-top: 8px;
+  }
+
+  &__tag {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: $color-accent-soft;
+    color: $color-accent-bright;
+  }
+
+  &__valence {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: capitalize;
+
+    &--positive {
+      color: $color-online;
+    }
+    &--negative {
+      color: $color-hangup;
+    }
+    &--neutral {
+      color: $color-text-faint;
+    }
+  }
+
+  &__time {
+    font-size: 10px;
+    color: $color-text-faint;
+  }
+
+  &__content {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: $color-text;
+  }
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 56px 1fr 36px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+
+  &__label {
+    font-size: 12px;
+    color: $color-text-dim;
+  }
+
+  &__track {
+    height: 6px;
+    border-radius: 999px;
+    background: $color-bg;
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, $color-accent, $color-observing);
+    transition: width 0.6s ease;
+  }
+
+  &__value {
+    font-size: 11px;
+    color: $color-text-faint;
+    text-align: right;
+  }
+}

@@ -1,0 +1,66 @@
+# dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# build outputs
+dist/
+build/
+web/dist/
+
+# env & secrets
+.env
+*.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+NUL
+
+# test / coverage
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# logs
+*.log
+logs/
+
+# alembic
+backend/alembic/versions/*.pyc
+
+# docker volumes
+pgdata/
+ollama/
+
+# local dev launchers / scratch (not part of the deployable stack)
+dev.ps1
+start.ps1
+stop.ps1
+*.local
+
+# ad-hoc / one-off scripts that shouldn't ship with the deployment
+backend/date_test*.py
+backend/drive_ws.py
+backend/scratch/
+backend/gemini_real_payload.py
+backend/light.md
+scripts/*.local.ps1
+
+# packaging / linter artifacts
+backend/mira_api.egg-info/
+backend/.ruff_cache/
+
+# runtime data Mira writes/regenerates (not part of the deployable image)
+# conversations.md is rebuilt from the database; learning/ is her own musings
+backend/data/conversations.md
+backend/data/learning/
+
+# strategy_lab is a separate trading experiment (market data + reports), not
+# part of Mira's deployment
+strategy_lab/

@@ -1,0 +1,190 @@
+@use "tokens" as *;
+
+// ── Phone: edge-to-edge messenger, no floating card ──────────────────
+// Under ~640px the chat stops being a centered dialog and becomes the whole
+// screen, the composer sits above the home indicator (safe-area), and small
+// tap targets grow to finger size. Everything below is additive overrides.
+@media (max-width: 640px) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+
+  // .app base sets overflow:hidden (centered scene). On a phone let the
+  // full-bleed sheet scroll its own content and never trap the composer.
+  .app {
+    overflow: auto;
+  }
+
+  // Full-bleed stage: no desktop gutters, the app is the whole screen.
+  .stage {
+    padding: 0;
+  }
+
+  // Presence bar: keep identity + state visible, drop the hover-caption
+  // (nothing to hover on a touchscreen), grow the pill buttons for thumbs.
+  .presence {
+    gap: 10px;
+    padding: 0 14px;
+    height: calc(var(--presence-h, 52px) + env(safe-area-inset-top, 0px));
+
+    &__name {
+      font-size: 12px;
+    }
+
+    &__caption {
+      display: none;
+    }
+
+    &__readout {
+      gap: 8px;
+    }
+
+    &__state {
+      font-size: 12px;
+    }
+
+    &__toggles {
+      gap: 6px;
+    }
+
+    &__archive {
+      padding: 8px 12px;
+      min-height: 36px;
+    }
+  }
+
+  // The messages screen: lose the card, become the sheet. Height tracks the
+  // visual viewport so the keyboard never traps the composer.
+  .messages {
+    width: 100%;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+
+    &__header {
+      padding: 14px 14px 12px;
+    }
+
+    &__back,
+    &__new {
+      min-height: 36px;
+    }
+  }
+
+  .thread-view__scroll {
+    padding: 12px;
+  }
+
+  // Composer always reachable: safe-area bottom (+ generous height for the
+  // phone keyboard), text at 16px so iOS never zooms into the input.
+  .composer {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+
+    &__input {
+      font-size: 16px;
+      padding: 12px 14px;
+      min-height: 48px;
+    }
+
+    &__send {
+      min-width: 56px;
+      padding: 0 16px;
+    }
+
+    &__attach {
+      width: 48px;
+      height: 48px;
+    }
+  }
+
+  // Messages: breathing room for thumbs, still capped so a line stays
+  // readable edge-to-edge.
+  .bubble {
+    max-width: 84%;
+    font-size: 16px;
+  }
+
+  // Thread rows: text-first, delete is a real target now, kind/time wrap.
+  .thread {
+    &__delete {
+      width: 36px;
+      height: 36px;
+    }
+
+    &__open {
+      gap: 8px;
+      padding: 10px 8px 10px 0;
+    }
+
+    &__time {
+      white-space: nowrap;
+    }
+  }
+
+  // Sidebars/panels: claim full width on the phone since there's no room to
+  // float a narrow drawer beside the thread.
+  .archive,
+  .perms {
+    width: 100%;
+  }
+
+  .archive {
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .perms {
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  // Home: the orb shouldn't outgrow a small viewport height, and the actions
+  // become full-width stack so they're tap-happy.
+  .home {
+    &__orb {
+      width: min(30vh, 240px, 70vw);
+      height: min(30vh, 240px, 70vw);
+    }
+
+    &__name {
+      font-size: 24px;
+    }
+
+    &__actions {
+      width: 100%;
+      flex-direction: column;
+      gap: 10px;
+      padding: 0 24px;
+    }
+
+    &__action {
+      width: 100%;
+      padding: 15px 26px;
+    }
+  }
+
+  // Self initiatives: as wide as the screen is, right at the bottom above the
+  // home indicator.
+  .self-banner {
+    width: calc(100vw - 24px);
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  // Browser mini-panel: near full-bleed instead of a floating bottom-right card.
+  .browser {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
+    height: min(60vh, calc(100dvh - 160px));
+  }
+
+  // Consent dialog is already responsive (min(400px,100%)); sharpen taps.
+  .consent {
+    &__deny,
+    &__approve {
+      min-height: 48px;
+    }
+  }
+}

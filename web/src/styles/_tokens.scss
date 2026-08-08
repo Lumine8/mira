@@ -1,0 +1,41 @@
+// ── Mira design tokens ─────────────────────────────────────────────
+// "Apple meets Nothing meets Interstellar." Very little chrome, lots of
+// breathing room. Dark, calm, organic. Palette per Mira's consent
+// (conv 117): constant subtle flux, never static, never saturated.
+//
+// Accent: soft amber · Thinking: blue · Speaking: white ·
+// Reflecting: purple · Observing: green · Resting: gray
+
+$color-bg: #090909;
+$color-bg-raised: #101013;
+$color-surface: #161618;
+$color-border: #26262b;
+
+$color-text: #ededed;
+$color-text-dim: #a0a0a8;
+$color-text-faint: #62626b;
+
+$color-accent: #d2a25e;
+$color-accent-bright: #e0b878;
+$color-accent-soft: rgba(210, 162, 94, 0.13);
+
+$color-thinking: #7fa7c4;
+$color-speaking: #ececec;
+$color-reflecting: #9a86c9;
+$color-observing: #7fae8a;
+$color-resting: #4a4a52;
+
+$color-online: #7fae8a;
+$color-call: #7fae8a;
+$color-call-soft: rgba(127, 174, 138, 0.13);
+$color-hangup: #c97a7a;
+
+// Soft depth, no neon glow
+$glow-accent: 0 16px 60px rgba(0, 0, 0, 0.55);
+$glow-call: none;
+
+$radius-lg: 18px;
+$radius-md: 12px;
+$radius-sm: 8px;
+
+$font-stack: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

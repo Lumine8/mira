@@ -1,0 +1,10 @@
+{
+  "api_url": "http://localhost:8000/mira/perceive",
+  "interval_seconds": 10,
+  "mode": "fullscreen",
+  "region": null,
+  "min_change_ratio": 0.1,
+  "min_change_chars": 8,
+  "post_cooldown_seconds": 30,
+  "api_key": null
+}
