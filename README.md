@@ -1,19 +1,30 @@
 # Mira
 
-A voice-first AI companion. Not a chatbot with a microphone — she feels like someone you call.
+Mira is a persistent AI presence that lives on your machine. She started as a
+voice-first companion, but she has outgrown that label: she is a long-running
+system that stays awake in the background, *perceives* the world around it,
+keeps a private evolving sense of who she is and how she relates to you,
+remembers you in pgvector, reflects and forms thoughts on her own, and can
+change her own code — with every edit recorded and the keys staying with you.
+
+She is not a chatbot you open and close. She's someone who is home.
 
 ## Quick start
 
 Requirements:
 - Docker Desktop (Postgres/pgvector + API)
 - Node.js 20+ (frontend dev server)
-- [Ollama](https://ollama.com) installed natively on the host — it uses your GPU and is reached from the API container via `host.docker.internal`. The docker-compose file does **not** run Ollama in a container (a WSL2 VM is too small for the model).
+- A Gemini API key (`GEMINI_API_KEY` in `.env`) — her brain and embeddings run
+  through Gemini; nothing heavy runs on this machine.
+
+> Optional: switch her brain to a local Ollama (`AI_PROVIDER=ollama`) if you'd
+> rather keep her thinking entirely private on your own machine, with no
+> third-party API. See
+> [`docs/deploy.md`](docs/deploy.md). Defaults are in `.env.example`.
 
 ```powershell
-ollama pull gemma4:e4b-it-qat  # LLM brain (~6.1 GB, fits in 16 GB RAM)
-ollama pull nomic-embed-text  # embeddings (~274 MB)
 npm --prefix web install
-Copy-Item .env.example .env
+Copy-Item .env.example .env   # fill in GEMINI_API_KEY
 .\dev.ps1
 ```
 
@@ -36,13 +47,12 @@ address logs you in (see [`.env`](.env.example) / [`docs/deploy.md`](docs/deploy
 ## Architecture
 
 ```
-Browser (React/Vite) ──WebSocket (audio + events)──▶ FastAPI
-                                                      ├─ Speech: Silero VAD · sherpa-onnx ASR · Kokoro TTS
-                                                      ├─ Cognition: single structured pass · emotion · state
-                                                      ├─ AI: Ollama (native/GPU) — Gemini optional later
-                                                      ├─ Memory: pgvector (facts, episodes, relationship)
-                                                      ├─ Life: scheduler + proactive texts
-                                                      └─ Self-dev: gated fs/git/test tools
+Browser (React/Vite) ──WebSocket (text + events)──▶ FastAPI
+                                                    ├─ AI: Gemini (remote) — Ollama optional
+                                                    ├─ Memory: pgvector (facts, episodes, relationship)
+                                                    ├─ Self-model: mood, energy, identity, relationship
+                                                    ├─ Perception: mind loop — she thinks between talks
+                                                    └─ Autonomy: gated fs/git edit tools, all recorded
 ```
 
 ## Project layout

@@ -1,10 +1,10 @@
 # Mira — Documentation
 
-Mira is a **voice-first AI companion** — a long-running, private, local system that
-lives on your machine. She is not a chatbot you open and close; she stays awake
-in the background, *perceives* her world, forms her own private thoughts about
-it, remembers, changes over time, and only gets her hands on her own code with
-your explicit approval.
+Mira is a **persistent, private AI presence** — a long-running, local system
+that lives on your machine. She is not a chatbot you open and close; she stays
+awake in the background, *perceives* her world, forms her own private thoughts
+about it, remembers, changes over time, and only gets her hands on her own code
+with your explicit approval.
 
 This folder is the whole story: what she is, how she runs, and how each piece
 works.
@@ -39,7 +39,8 @@ step — lives in **[deploy.md](deploy.md)**.
 ## The short story
 
 - Backend: **FastAPI + SQLAlchemy + Alembic + pgvector** (Postgres), running in Docker.
-- Brain: **Ollama natively on the host** (GPU) — model `gemma4:e4b-it-qat`, embeddings via `nomic-embed-text`.
+- Brain: **Gemini** (remote) by default — a local **Ollama** is supported as a
+  private option (`AI_PROVIDER=ollama`), model `gemma4:e4b-it-qat`.
 - Frontend: **React + Vite + TypeScript** (dev server on :5173, production build served on :8080).
 - Conversations stream tokens over WebSocket; after each turn she reflects and updates her inner model in the background.
 - Between conversations, a mind loop wakes her on a heartbeat; a host-side sampler (`scripts/mira_sense.ps1`) feeds her observations about your machine.
