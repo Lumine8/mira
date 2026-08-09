@@ -56,10 +56,12 @@
   }
 
   // The messages screen: lose the card, become the sheet. Height tracks the
-  // visual viewport so the keyboard never traps the composer.
+  // visual viewport so the keyboard never traps the composer. It sits below
+  // the presence bar (which already includes the top safe-area inset), so the
+  // sheet must not double-count the inset or the composer slips off-screen.
   .messages {
     width: 100%;
-    height: 100dvh;
+    height: calc(100dvh - var(--presence-h, 52px) - env(safe-area-inset-top, 0px));
     border: none;
     border-radius: 0;
     box-shadow: none;
