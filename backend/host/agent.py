@@ -1,6 +1,6 @@
 """Mira's hands: the host agent that performs approved actions on this machine.
 
-Two kinds of action come from the API:
+Kinds of action come from the API:
 
   host_command — commands Mira proposes (as [[run|reason|command]]) and the user
       approves in the web UI. Nothing runs without that approval. Every command
@@ -11,15 +11,23 @@ Two kinds of action come from the API:
       read-only and needs no approval. The file's content is read here (size
       capped), logged, and posted back into her context.
 
+  x_read / x_post — X actions Mira proposes (as [[x|...]]) and the user
+      approves. Instead of Twitter's paid API (whose credit pool can be
+      depleted), the real browser logged into the account performs them through
+      CDP: posting types the words in the compose box and presses Post, reading
+      pulls the account's recent posts. Same approval gate as everything else.
+
 Run:
     .venv\\Scripts\\python agent.py
 
 Security: commands never run without your approval. Reads touch nothing — they
-only look. A full transcript lives next to this script.
+only look. X posts never happen without the approval popup. A full transcript
+lives next to this script.
 """
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -27,6 +35,8 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
+
+from browser import BrowserXError, post_tweet, read_own_timeline
 
 CONFIG_PATH = Path(__file__).with_name("eyes_config.json")
 LOG_PATH = Path(__file__).with_name("commands.log")
@@ -46,6 +56,25 @@ def load_base_url() -> str:
         except Exception:
             pass
     return DEFAULT_BASE
+
+
+def load_token() -> str:
+    """The Mira access token, read from the MIRA_ACCESS_TOKEN var or the
+    eyes_config.json api_key field, so the agent can reach authorized routes."""
+    token = os.environ.get("MIRA_ACCESS_TOKEN", "") or os.environ.get("MIRA_API_TOKEN", "")
+    if token:
+        return token
+    if CONFIG_PATH.exists():
+        try:
+            return str(json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("api_key", "") or "")
+        except Exception:
+            return ""
+    return ""
+
+
+def headers() -> dict:
+    token = load_token()
+    return {"X-Mira-Token": token} if token else {}
 
 
 def log_entry(kind: str, message: str) -> None:
@@ -107,6 +136,7 @@ def report_result(base: str, change: dict, note: str, prefix: str = "") -> None:
         r = requests.post(
             f"{base}/mira/tools/host-result/{cid}",
             json={"result": note},
+            headers=headers(),
             timeout=10,
         )
         r.raise_for_status()
@@ -127,7 +157,7 @@ def main() -> None:
 
     while True:
         try:
-            resp = requests.get(pending_url, timeout=10)
+            resp = requests.get(pending_url, headers=headers(), timeout=10)
             resp.raise_for_status()
             pending = resp.json()
         except Exception as exc:  # noqa: BLE001 - API may be briefly down
@@ -157,6 +187,24 @@ def main() -> None:
                 code, output = run_command(command)
                 note = output[:8000] if output else f"(exit code {code}, no output)"
                 report_result(base, change, f"exit={code}\n{note}", f" (exit {code})")
+            elif kind in ("x_read", "x_post"):
+                if kind == "x_read":
+                    query = payload.get("query", "")
+                    log_entry("X", f"#{cid} ({summary}): read {query}")
+                    print(f"[agent] X #{cid}: read")
+                    try:
+                        note = read_own_timeline()
+                    except BrowserXError as exc:
+                        note = f"[x] {exc}"
+                else:
+                    text = payload.get("text", "")
+                    log_entry("X", f"#{cid} ({summary}): {text[:200]}")
+                    print(f"[agent] X #{cid}: post")
+                    try:
+                        note = post_tweet(text)
+                    except BrowserXError as exc:
+                        note = f"[x] {exc}"
+                report_result(base, change, f"{note}", " (x)")
             else:
                 print(f"[agent] change #{cid} has unknown kind {kind!r}; skipping")
 

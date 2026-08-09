@@ -139,3 +139,21 @@ function wsToken(): string {
 export function acknowledge(): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>("/mira/acknowledge", { method: "POST" });
 }
+
+export interface XStatus {
+  connected: boolean;
+  username?: string | null;
+  configured: boolean;
+}
+
+export function fetchXStatus(): Promise<XStatus> {
+  return request<XStatus>("/mira/x/status");
+}
+
+/** URL Mira's OAuth flow needs the voice to open in a browser. The token is
+ * appended as ?token= because this is opened via a plain navigation that
+ * cannot carry the X-Mira-Token header. */
+export function xAuthUrl(): string {
+  const token = getAccessToken();
+  return `${BASE}/mira/x/auth/start${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+}

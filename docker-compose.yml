@@ -41,6 +41,10 @@ services:
       MIRA_MONEY_DENY_COMMANDS: ${MIRA_MONEY_DENY_COMMANDS:-}
       MIRA_ARCHIVE_PATH: ${MIRA_ARCHIVE_PATH:-data/conversations.md}
       MIRA_ACCESS_TOKEN: ${MIRA_ACCESS_TOKEN:-}
+      X_CLIENT_ID: ${X_CLIENT_ID:-}
+      X_CLIENT_SECRET: ${X_CLIENT_SECRET:-}
+      X_REDIRECT_URI: ${X_REDIRECT_URI:-}
+      X_SCOPES: ${X_SCOPES:-tweet.read tweet.write users.read offline.access}
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemma-4-31b-it}

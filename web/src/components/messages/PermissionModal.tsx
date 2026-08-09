@@ -17,7 +17,10 @@ export default function PermissionModal({ change, onApprove, onDeny, onClose }: 
       : "";
   const command =
     change?.kind === "host_command" ? String(change.payload.command ?? "") : "";
-  const detail = url || path || listen || command;
+  const xText =
+    change?.kind === "x_post" ? String(change.payload.text ?? "") : "";
+  const xQuery = change?.kind === "x_read" ? String(change.payload.query ?? "") : "";
+  const detail = url || path || listen || command || xText || xQuery;
 
   const tag = change
     ? change.kind === "browse_url"
@@ -26,7 +29,11 @@ export default function PermissionModal({ change, onApprove, onDeny, onClose }: 
         ? "she wants to hear"
         : change.kind === "host_command"
           ? "she wants to run something on your computer"
-          : "she wants to change"
+          : change.kind === "x_post"
+            ? "she wants to post on X"
+            : change.kind === "x_read"
+              ? "she wants to look at X"
+              : "she wants to change"
     : "";
 
   return (

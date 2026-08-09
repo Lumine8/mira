@@ -202,15 +202,26 @@ def build_observations(
     last_message_at: datetime | None,
     last_reflection_at: datetime | None,
     weather: str | None = None,
+    weather_unchanged: bool = False,
 ) -> str:
     """Turn time texture + raw perceived events into a short observation feed.
 
-    Pure function so it can be unit-tested without a database.
+    Pure function so it can be unit-tested without a database. When the same
+    weather has already been offered to a previous reflection
+    (``weather_unchanged``), it is shown as continuing context rather than
+    novel input, so the model does not treat it as freshly interesting.
     """
     lines = [f"It is {now.strftime('%A, %B %d')} — {_time_of_day(now)}. ({now.strftime('%I:%M %p')})"]
 
     if weather:
-        lines.append(f"The weather outside is: {weather}.")
+        if weather_unchanged:
+            lines.append(
+                f"The weather outside is still: {weather}. (Unchanged since the "
+                "last time you looked — this is not a new observation, so there "
+                "is nothing new to notice in it.)"
+            )
+        else:
+            lines.append(f"The weather outside is: {weather}.")
 
     if last_message_at is not None:
         gap_min = (now - last_message_at).total_seconds() / 60
@@ -247,6 +258,7 @@ class MindLoop:
     def __init__(self, provider: AIProvider) -> None:
         self.provider = provider
         self._task: asyncio.Task | None = None
+        self._last_weather: str | None = None
 
     def start(self) -> None:
         if self._task is None:
@@ -318,7 +330,16 @@ class MindLoop:
             select(Message.created_at).order_by(Message.created_at.desc()).limit(1)
         ).scalar_one_or_none()
         weather = await _fetch_weather(get_settings())
-        observations = build_observations(now, pending, last_msg, st.last_reflection_at, weather=weather)
+        weather_unchanged = weather is not None and weather == self._last_weather
+        observations = build_observations(
+            now,
+            pending,
+            last_msg,
+            st.last_reflection_at,
+            weather=weather,
+            weather_unchanged=weather_unchanged,
+        )
+        self._last_weather = weather
 
         state_line = (
             f"Her self-understanding: {st.self_understanding or 'not sure yet'}\n"

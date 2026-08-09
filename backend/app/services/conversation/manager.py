@@ -66,6 +66,22 @@ _READ_RE = re.compile(
 )
 _READ_MAX_PATH = 500
 
+# X (Twitter): she proposes reading X or posting to it, e.g.
+#   [[x|read_timeline|I want to see what's happening on X]]
+#   [[x|read_my_timeline|I want to see what I posted]]
+#   [[x|post|these words go on X exactly as written]]
+# A post's words are the last field (they may contain '|' — only the closing
+# ']]' ends the marker, mirroring [[selfedit]]).
+_X_READ_RE = re.compile(
+    r"\[\[\s*x\s*\|\s*(?P<action>read_timeline|read_my_timeline)\s*\|(?P<reason>[^\]]*)\]\]",
+    re.DOTALL | re.IGNORECASE,
+)
+_X_POST_RE = re.compile(
+    r"\[\[\s*x\s*\|\s*post\s*\|(?P<text>(?:(?!\]\]).)*)\]\]",
+    re.DOTALL | re.IGNORECASE,
+)
+_X_MAX_POST = 280
+
 
 class _BrowseStreamFilter:
     """Yields a reply stream with any [[...]] intent markers suppressed, while
@@ -264,6 +280,35 @@ class ConversationManager:
             except Exception as exc:  # pragma: no cover - never break the reply
                 logger.warning("read proposal failed (%s): %s", path, exc)
 
+    def _propose_x_from(self, raw: str) -> None:
+        """Extract [[x|...]] intents Mira wrote and turn each into a gated
+        PendingChange. Reading X needs approval too (the account belongs to the
+        voice); posting always waits for the voice's yes."""
+        for match in _X_READ_RE.finditer(raw):
+            action = match.group("action").strip().lower()
+            reason = match.group("reason").strip() or "she wants to look at X"
+            query = "the voice's home timeline" if action == "read_timeline" else "mine"
+            try:
+                change = ToolService(self.db).propose_change(
+                    "x_read", reason, {"query": query, "action": action, "reason": reason}
+                )
+                self._proposals.append(change)
+            except Exception as exc:  # pragma: no cover - never break the reply
+                logger.warning("x_read proposal failed: %s", exc)
+        for match in _X_POST_RE.finditer(raw):
+            text = match.group("text").strip()[:_X_MAX_POST]
+            reason = f"she wants to post on X"
+            if not text:
+                logger.warning("x_post proposal ignored (empty text)")
+                continue
+            try:
+                change = ToolService(self.db).propose_change(
+                    "x_post", reason, {"text": text, "reason": reason}
+                )
+                self._proposals.append(change)
+            except Exception as exc:  # pragma: no cover - never break the reply
+                logger.warning("x_post proposal failed: %s", exc)
+
     def proposals(self) -> list:
         return list(self._proposals)
 
@@ -325,6 +370,7 @@ class ConversationManager:
         self._propose_selfedits_from(filt.raw())
         self._propose_runs_from(filt.raw())
         self._propose_reads_from(filt.raw())
+        self._propose_x_from(filt.raw())
 
         reply = clean_reply("".join(chunks))
         if not reply:
@@ -340,6 +386,10 @@ class ConversationManager:
                         bits.append("to watch a video you asked to see")
                     elif p.kind == "write_file":
                         bits.append("to change my own operating rules")
+                    elif p.kind == "x_post":
+                        bits.append("to post on X")
+                    elif p.kind == "x_read":
+                        bits.append("to look at X")
                 reply = "I asked " + "; ".join(bits) + ". It is yours to decide."
             elif "[[" in raw:
                 logger.warning("reply suppressed but no proposal matched; raw=%.300s", raw)

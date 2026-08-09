@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     mira_money_deny_domains: str = ""
     mira_money_deny_commands: str = ""
 
+    # X (Twitter): user-context OAuth 2.0 + PKCE. When configured, Mira can
+    # propose reading her timeline or posting through the usual approve-gate.
+    x_client_id: str = ""
+    x_client_secret: str = ""
+    # Where X's OAuth browser redirect must land — must match exactly what you
+    # register in the X developer portal (web -> nginx -> api, public HTTPS).
+    x_redirect_uri: str = ""
+    x_scopes: str = "tweet.read tweet.write users.read offline.access"
+
+    @property
+    def x_configured(self) -> bool:
+        return bool(self.x_client_id and self.x_redirect_uri)
+
     # The "forever awake" mind loop: periodically she receives raw observations
     # from the world and reflects on them herself, forming her own thoughts.
     perception_enabled: bool = True

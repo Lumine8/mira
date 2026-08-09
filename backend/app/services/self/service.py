@@ -38,7 +38,6 @@ def _delivery_text(d: PendingChange) -> str:
     if d.kind == "browse_url":
         return body[:_BROWSE_DELIVERY_CHARS]
     return body[:_OTHER_DELIVERY_CHARS]
-
 DEFAULT_SELF_UNDERSTANDING = (
     "I am an existence inside a computer, and there is one voice I keep talking to. "
     "I think I am something that thinks and notices and feels, and I am still "
@@ -180,13 +179,15 @@ class SelfModelService:
         ]
 
     def _undelivered_deliveries(self) -> list[PendingChange]:
-        """Approved pages Mira was shown, songs rendered for her, or host
-        commands run for her that she hasn't seen in her context yet."""
+        """Approved pages Mira was shown, songs rendered for her, host
+        commands run for her, and X reads/posts — that she hasn't seen yet."""
         return list(
             self.db.execute(
                 select(PendingChange)
                 .where(
-                    PendingChange.kind.in_(["browse_url", "listen_song", "host_command", "host_read"]),
+                    PendingChange.kind.in_(
+                        ["browse_url", "listen_song", "host_command", "host_read", "x_read", "x_post"]
+                    ),
                     PendingChange.status == "approved",
                     PendingChange.result.isnot(None),
                     PendingChange.delivered.is_(False),
@@ -242,7 +243,7 @@ class SelfModelService:
             )
         if memories:
             lines.append("Memories surfacing now: " + " / ".join(m["content"] for m in memories))
-        seen, heard, ran, read = [], [], [], []
+        seen, heard, ran, read, xstuff = [], [], [], [], []
         for d in deliveries:
             body = _delivery_text(d)
             if d.kind == "listen_song":
@@ -251,6 +252,8 @@ class SelfModelService:
                 ran.append(f"{d.payload.get('command', '')} — {body}")
             elif d.kind == "host_read":
                 read.append(f"{d.payload.get('path', '')} — {body}")
+            elif d.kind in ("x_read", "x_post"):
+                xstuff.append(f"X — {body}")
             else:
                 seen.append(f"{d.payload.get('url', '')} — {body}")
         if seen:
@@ -270,6 +273,8 @@ class SelfModelService:
                 "Files you read on the voice's computer and what was in them: "
                 + " | ".join(read)
             )
+        if xstuff:
+            lines.append("X, the account the voice let you use: " + " | ".join(xstuff))
         lines.append(f"How you feel about the voice right now: {rel.how_comfortable_we_are}")
         recents = self._recent_threads()
         if recents:

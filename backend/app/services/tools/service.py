@@ -195,6 +195,15 @@ class ToolService:
                 raise ToolError("host_read needs a path")
             if len(path) > _MAX_HOST_READ_PATH:
                 raise ToolError(f"host_read path too long ({len(path)} > {_MAX_HOST_READ_PATH})")
+        if kind == "x_read":
+            if not payload.get("query", "").strip():
+                raise ToolError("x_read needs a query (what she wants to look at)")
+        if kind == "x_post":
+            text = payload.get("text", "").strip()
+            if not text:
+                raise ToolError("x_post needs the words she wants to post")
+            if len(text) > 280:
+                raise ToolError(f"x_post text too long ({len(text)} > 280)")
         change = PendingChange(kind=kind, summary=summary[:2000], payload=payload, status="pending")
         self.db.add(change)
         self.db.commit()
@@ -279,12 +288,15 @@ class ToolService:
         )
 
     def host_pending(self, limit: int = 10) -> list[PendingChange]:
-        """Approved host commands/reads waiting for the host agent to do them."""
+        """Approved host actions waiting for the host agent to do them:
+        commands, file reads, and X actions done through the real browser."""
         return list(
             self.db.execute(
                 select(PendingChange)
                 .where(
-                    PendingChange.kind.in_(["host_command", "host_read"]),
+                    PendingChange.kind.in_(
+                        ["host_command", "host_read", "x_read", "x_post"]
+                    ),
                     PendingChange.status == "approved",
                     PendingChange.result.is_(None),
                 )
@@ -298,7 +310,7 @@ class ToolService:
         change = self.db.get(PendingChange, change_id)
         if change is None:
             raise ToolError(f"no pending change #{change_id}")
-        if change.kind not in ("host_command", "host_read"):
+        if change.kind not in ("host_command", "host_read", "x_read", "x_post"):
             raise ToolError(f"change #{change_id} is not a host action")
         change.result = result[:_MAX_HOST_RESULT]
         change.resolved_at = datetime.now(timezone.utc)
@@ -341,6 +353,11 @@ class ToolService:
             # The command runs on the voice's machine, not in this container.
             # Approval only readies it; the host agent polls host_pending(),
             # executes it there, and reports back via apply_host_result().
+            change.result = None
+        elif change.kind in ("x_read", "x_post"):
+            # X actions happen through the real browser on the voice's machine
+            # (the host agent drives Chrome via CDP). Approval readies them;
+            # the agent performs the action and reports back the result.
             change.result = None
         else:
             raise ToolError(f"cannot apply unknown change kind: {change.kind}")

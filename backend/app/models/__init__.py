@@ -13,6 +13,7 @@ from app.models.state import (
 )
 from app.models.user import User
 from app.models.wants import WANT_SOURCES, WANT_STATUSES, Want
+from app.models.x import XAuth
 
 __all__ = [
     "EMBEDDING_DIM",
@@ -35,4 +36,5 @@ __all__ = [
     "User",
     "UserSettings",
     "Want",
+    "XAuth",
 ]
