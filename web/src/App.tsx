@@ -4,6 +4,7 @@ import { useMessages } from "./features/messages/useMessages";
 import { useMiraState } from "./features/state/useMiraState";
 import { useMiraLive } from "./features/state/useMiraLive";
 import { derivePresence, latestThought } from "./features/state/presence";
+import { useFavicon, type FaviconMode } from "./features/state/useFavicon";
 import MessagesScreen from "./components/messages/MessagesScreen";
 import PresenceBar from "./components/body/PresenceBar";
 import ArchivePanel from "./components/body/ArchivePanel";
@@ -48,6 +49,13 @@ export default function App() {
     thinking: messages.thinking,
     connected: messages.connected || memory != null,
   });
+
+  const faviconMode: FaviconMode = messages.currentRequest || live.message
+    ? "alert"
+    : messages.thinking || messages.streaming
+      ? "typing"
+      : "idle";
+  useFavicon(faviconMode);
 
   const enterMessages = () => {
     setView("messages");
