@@ -24,6 +24,11 @@ TENSION_PER_HOUR = 2.0
 REINFORCE_STRENGTHEN = 10
 REINFORCE_RELIEF = 20
 _MAX_HOURS_STEP = 6.0
+# Re-upserting a want that was just touched (e.g. the reflection echoing the
+# active list back into its own prompt) must not keep pumping its intensity.
+# Only a want that has gone un-touched for this long counts as genuinely
+# returned-to, so echoes every few minutes can't pin a want at 100 forever.
+ECHO_COOLDOWN_HOURS = 2.0
 
 
 def normalize_want_text(text: str) -> str:
@@ -114,6 +119,12 @@ class WantService:
 
         for w in self.list_active(limit=100):
             if wants_match(w.content, text):
+                hours_since = (now - w.updated_at).total_seconds() / 3600
+                if hours_since < ECHO_COOLDOWN_HOURS:
+                    # An echo (the reflection re-listing an active want) does
+                    # not strengthen it nor refresh its clock, so decay() keeps
+                    # applying and the want can still fade on its own.
+                    return w
                 w.intensity, w.tension = reinforce(w.intensity, w.tension, strength)
                 w.updated_at = now
                 self.db.commit()
