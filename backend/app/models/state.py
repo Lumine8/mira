@@ -1,11 +1,15 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+# Postgres gets true JSONB; sqlite (tests) falls back to plain JSON so the
+# whole model set can be created in-memory.
+JSONB_PORTABLE = JSONB().with_variant(JSON(), "sqlite")
 
 MOOD_CHOICES = [
     "relaxed",
@@ -27,16 +31,17 @@ class MiraState(Base):
     __tablename__ = "mira_state"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     mood: Mapped[str] = mapped_column(String(32), default="relaxed")
-    emotion_intensities: Mapped[dict[str, float]] = mapped_column(JSONB, default=dict)
+    emotion_intensities: Mapped[dict[str, float]] = mapped_column(JSONB_PORTABLE, default=dict)
     energy: Mapped[int] = mapped_column(Integer, default=70)
     currently_reading: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     favorite_song: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    things_she_is_curious_about: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    things_she_is_curious_about: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
     last_conversation_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Her evolving answer to "what am I?" — updated after conversations by the digest.
     self_understanding: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    thoughts: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    thoughts: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
     # A message she formed on her own (during background reflection) that she
     # would like to share with the user; surfaced via /mira/state and cleared
     # once the user has seen it.
@@ -56,13 +61,13 @@ class Relationship(Base):
     __tablename__ = "relationship"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     trust: Mapped[float] = mapped_column(Float, default=0.3)
     humor: Mapped[float] = mapped_column(Float, default=0.3)
     shared_experiences: Mapped[float] = mapped_column(Float, default=0.1)
     comfort: Mapped[float] = mapped_column(Float, default=0.3)
-    topics_we_discuss: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict)
-    nicknames: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    topics_we_discuss: Mapped[dict[str, int]] = mapped_column(JSONB_PORTABLE, default=dict)
+    nicknames: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
     conversation_style: Mapped[str] = mapped_column(String(255), default="warm, playful, short replies")
     how_comfortable_we_are: Mapped[str] = mapped_column(Text, default="we're getting to know each other")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -74,6 +79,7 @@ class Thought(Base):
     __tablename__ = "thoughts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     content: Mapped[str] = mapped_column(Text)
     source_activity: Mapped[str] = mapped_column(String(64), default="thought")
     delivered: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -91,6 +97,7 @@ class MoodRecord(Base):
     __tablename__ = "mood_history"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     mood: Mapped[str] = mapped_column(String(32))
     energy: Mapped[int] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(32), default="digest")
@@ -102,6 +109,7 @@ class SchedulerLog(Base):
     __tablename__ = "scheduler_log"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     activity: Mapped[str] = mapped_column(String(64))
     result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -116,6 +124,7 @@ class PerceivedEvent(Base):
     __tablename__ = "perceived_events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     source: Mapped[str] = mapped_column(String(64))
     kind: Mapped[str] = mapped_column(String(64))
     content: Mapped[str] = mapped_column(Text)
@@ -129,9 +138,10 @@ class PendingChange(Base):
     __tablename__ = "pending_changes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     kind: Mapped[str] = mapped_column(String(64))
     summary: Mapped[str] = mapped_column(Text)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB_PORTABLE, default=dict)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     delivered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
@@ -143,10 +153,13 @@ class UserSettings(Base):
     __tablename__ = "settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[Optional[int]] = mapped_column(nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     voice: Mapped[str] = mapped_column(String(64), default="en-us-heart-kokoro")
     speaking_speed: Mapped[float] = mapped_column(Float, default=1.0)
     personality: Mapped[str] = mapped_column(String(255), default="warm, curious, funny when appropriate")
     memory_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     theme: Mapped[str] = mapped_column(String(16), default="dark")
+    # Per-user message cap per UTC day; None = use the deployment default (the
+    # free tier). This is the seam where paid tiers plug in.
+    message_cap_per_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

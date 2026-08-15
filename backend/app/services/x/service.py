@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -49,16 +50,21 @@ def _basic_auth(user: str, secret: str) -> str:
 
 
 class TwitterService:
-    def __init__(self, db: Session) -> None:
+    """X access for one user's world: the OAuth session belongs to a user_id."""
+
+    def __init__(self, db: Session, *, user_id: int) -> None:
         self.db = db
+        self.user_id = user_id
         self.settings = get_settings()
 
     # -- single-row session helpers ----------------------------------------
 
     def _row(self) -> XAuth:
-        row = self.db.query(XAuth).filter(XAuth.id == 1).one_or_none()
+        row = self.db.execute(
+            select(XAuth).where(XAuth.user_id == self.user_id).limit(1)
+        ).scalar_one_or_none()
         if row is None:
-            row = XAuth(id=1)
+            row = XAuth(user_id=self.user_id)
             self.db.add(row)
             self.db.commit()
             self.db.refresh(row)

@@ -42,6 +42,7 @@ def test_speak_route_refuses_text_conversation() -> None:
 
     class FakeConv:
         kind = "text"
+        user_id = 1
 
     class FakeDB:
         def get(self, _model, _id):
@@ -55,7 +56,7 @@ def test_speak_route_refuses_text_conversation() -> None:
     calls_module.get_settings = lambda: FakeSettings()
 
     with pytest.raises(Exception) as exc_info:
-        speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB())
+        speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB(), user_id=1)
     assert "text conversations stay quiet" in str(exc_info.value)
 
 
@@ -66,6 +67,7 @@ def test_speak_route_allows_call_conversation() -> None:
 
     class FakeConv:
         kind = "call"
+        user_id = 1
 
     class FakeDB:
         def get(self, _model, _id):
@@ -81,7 +83,7 @@ def test_speak_route_allows_call_conversation() -> None:
         np.array([0.1, -0.1], dtype=np.float32), sample_rate=24000
     )
     try:
-        resp = calls_module.speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB())
+        resp = calls_module.speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB(), user_id=1)
         assert resp.media_type == "audio/wav"
         assert len(resp.body) > 0
     finally:

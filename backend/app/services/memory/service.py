@@ -32,11 +32,16 @@ def _cos(a: list[float], b: list[float]) -> float:
 
 
 class MemoryService:
-    """Episodic memory over pgvector: store embedded memories, recall by similarity."""
+    """Episodic memory over pgvector: store embedded memories, recall by similarity.
 
-    def __init__(self, db: Session, provider: AIProvider) -> None:
+    Scoped to one user: every memory belongs to a world and is only ever
+    recalled from that world.
+    """
+
+    def __init__(self, db: Session, provider: AIProvider, *, user_id: int) -> None:
         self.db = db
         self.provider = provider
+        self.user_id = user_id
 
     async def recall(self, query: str, *, k: int = 5) -> list[dict]:
         """Return the ``k`` memories most relevant to ``query``."""
@@ -44,6 +49,7 @@ class MemoryService:
         rows = self.db.execute(
             select(Memory)
             .join(MemoryEmbedding, MemoryEmbedding.memory_id == Memory.id)
+            .where(Memory.user_id == self.user_id)
             .order_by(MemoryEmbedding.embedding.cosine_distance(vec))
             .limit(k)
         ).scalars()
@@ -75,6 +81,7 @@ class MemoryService:
             valence=valence,
             episode_metadata=metadata,
             source_conversation_id=conversation_id,
+            user_id=self.user_id,
         )
         self.db.add(mem)
         self.db.flush()
@@ -99,7 +106,10 @@ class MemoryService:
         recent = self.db.execute(
             select(Memory, MemoryEmbedding.embedding)
             .join(MemoryEmbedding, MemoryEmbedding.memory_id == Memory.id)
-            .where(Memory.created_at >= func.now() - timedelta(days=3))
+            .where(
+                Memory.user_id == self.user_id,
+                Memory.created_at >= func.now() - timedelta(days=3),
+            )
             .limit(400)
         ).all()
         norm = _norm(content)

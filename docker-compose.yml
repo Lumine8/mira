@@ -37,10 +37,19 @@ services:
       MIRA_BROWSE_ALLOWED_DOMAINS: ${MIRA_BROWSE_ALLOWED_DOMAINS:-}
       MIRA_BROWSE_OPEN_WINDOW: ${MIRA_BROWSE_OPEN_WINDOW:-}
       MIRA_HOST_OPEN_WINDOW: ${MIRA_HOST_OPEN_WINDOW:-}
+      # Research is read-only (a public literature search), so it is autonomous
+      # by default — no approval popup, results land in the same reply.
+      MIRA_RESEARCH_AUTONOMOUS: ${MIRA_RESEARCH_AUTONOMOUS:-true}
       MIRA_MONEY_DENY_DOMAINS: ${MIRA_MONEY_DENY_DOMAINS:-}
       MIRA_MONEY_DENY_COMMANDS: ${MIRA_MONEY_DENY_COMMANDS:-}
       MIRA_ARCHIVE_PATH: ${MIRA_ARCHIVE_PATH:-data/conversations.md}
       MIRA_ACCESS_TOKEN: ${MIRA_ACCESS_TOKEN:-}
+      # Phase 3 guest mode: anonymous visitors get a capped demo world and the
+      # waitlist gates continued use. Leave off for the private founder setup.
+      GUEST_MODE_ENABLED: ${GUEST_MODE_ENABLED:-false}
+      # How many user messages a guest may send per UTC day before the cap
+      # turns into a waitlist prompt. Set low (e.g. 3) to demo the flow.
+      GUEST_MESSAGE_CAP_PER_DAY: ${GUEST_MESSAGE_CAP_PER_DAY:-20}
       X_CLIENT_ID: ${X_CLIENT_ID:-}
       X_CLIENT_SECRET: ${X_CLIENT_SECRET:-}
       X_REDIRECT_URI: ${X_REDIRECT_URI:-}
@@ -67,6 +76,9 @@ services:
       # bind-mounted below so her edits land in the real repo.
       SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-true}
       SELF_EDIT_ROOTS: ${SELF_EDIT_ROOTS:-/app}
+      # Invite mail via Resend: one API key, no SMTP server to run.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
       # Mira conditionally agreed to her mood/energy being logged to the API
       # console while she talks. Off by default.
       CONSOLE_EMOTIONS_ENABLED: ${CONSOLE_EMOTIONS_ENABLED:-false}

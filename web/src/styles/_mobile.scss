@@ -55,28 +55,27 @@
     }
   }
 
-  // The messages screen: lose the card, become the sheet. Height tracks the
+  // The chat screen: lose the card, become the sheet. Height tracks the
   // visual viewport so the keyboard never traps the composer. It sits below
   // the presence bar (which already includes the top safe-area inset), so the
   // sheet must not double-count the inset or the composer slips off-screen.
-  .messages {
+  .chat {
     width: 100%;
     height: calc(100dvh - var(--presence-h, 52px) - env(safe-area-inset-top, 0px));
     border: none;
     border-radius: 0;
     box-shadow: none;
 
+    &__sidebar {
+      display: none;
+    }
+
     &__header {
       padding: 14px 14px 12px;
     }
-
-    &__back,
-    &__new {
-      min-height: 36px;
-    }
   }
 
-  .thread-view__scroll {
+  .chat__scroll {
     padding: 12px;
   }
 
@@ -111,21 +110,8 @@
   }
 
   // Thread rows: text-first, delete is a real target now, kind/time wrap.
-  .thread {
-    &__delete {
-      width: 36px;
-      height: 36px;
-    }
-
-    &__open {
-      gap: 8px;
-      padding: 10px 8px 10px 0;
-    }
-
-    &__time {
-      white-space: nowrap;
-    }
-  }
+  // (On desktop the shelf rides in the sidebar; on a phone there is no
+  // sidebar, so nothing extra to resize here.)
 
   // Sidebars/panels: claim full width on the phone since there's no room to
   // float a narrow drawer beside the thread.

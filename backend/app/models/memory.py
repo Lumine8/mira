@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,16 +10,20 @@ from app.db.base import Base
 
 EMBEDDING_DIM = 768  # nomic-embed-text
 
+# Postgres gets true JSONB; sqlite (tests) falls back to plain JSON so the
+# whole model set can be created in-memory.
+JSONB_PORTABLE = JSONB().with_variant(JSON(), "sqlite")
+
 
 class Memory(Base):
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     type: Mapped[str] = mapped_column(String(32), default="fact")  # fact | episode | relationship_event
     content: Mapped[str] = mapped_column(Text)
     valence: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # positive | negative | neutral
-    episode_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    episode_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_PORTABLE, nullable=True)
     source_conversation_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("conversations.id"), nullable=True
     )

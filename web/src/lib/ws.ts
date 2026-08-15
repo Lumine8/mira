@@ -3,6 +3,7 @@ import type { WsEvent } from "./types";
 interface Handlers {
   onEvent: (event: WsEvent) => void;
   onOpen?: () => void;
+  onReconnect?: () => void;
   onClose?: () => void;
   onError?: (message: string) => void;
 }
@@ -30,8 +31,14 @@ export class MiraSocket {
     this.ws = ws;
 
     ws.onopen = () => {
+      const reconnected = this.reconnectAttempt > 0;
       this.reconnectAttempt = 0;
       this.handlers.onOpen?.();
+      if (reconnected) {
+        // The socket dropped and came back: events sent while we were away
+        // are lost, so the consumer should resync from the server.
+        this.handlers.onReconnect?.();
+      }
     };
 
     ws.onmessage = (event) => {

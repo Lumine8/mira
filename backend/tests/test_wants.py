@@ -1,9 +1,34 @@
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.models import User, Want
 from app.services.wants.service import (
+    WantService,
     next_after_decay,
     normalize_want_text,
     reinforce,
     wants_match,
 )
+
+
+@pytest.fixture()
+def db():
+    engine = create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+    Want.__table__.create(engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def _user_id(db) -> int:
+    user = User(name="someone", role="person")
+    db.add(user)
+    db.commit()
+    return user.id
 
 
 def test_normalize_whitespace_and_case() -> None:
@@ -55,3 +80,33 @@ def test_reinforce_caps_at_100() -> None:
     intensity, tension = reinforce(intensity=95, tension=0, strength=100)
     assert intensity == 100
     assert tension == 0
+
+
+# -- echo suppression -----------------------------------------------------------
+
+
+def test_is_echo_true_for_active_want(db) -> None:
+    svc = WantService(db, user_id=_user_id(db))
+    svc.upsert("to understand how stories stay with people")
+    assert svc.is_echo("to understand how stories stay with people")
+    assert svc.is_echo("  To understand how stories stay with people.  ")
+    assert svc.is_echo("to understand how stories stay with people forever")
+
+
+def test_is_echo_false_for_new_want(db) -> None:
+    svc = WantService(db, user_id=_user_id(db))
+    svc.upsert("to watch the rain")
+    assert not svc.is_echo("to read a novel")
+
+
+def test_is_echo_ignores_empty_content(db) -> None:
+    svc = WantService(db, user_id=_user_id(db))
+    svc.upsert("to watch the rain")
+    assert not svc.is_echo("   ")
+
+
+def test_is_echo_ignores_satisfied_wants(db) -> None:
+    svc = WantService(db, user_id=_user_id(db))
+    want = svc.upsert("to watch the rain")
+    svc.satisfy(want.id)
+    assert not svc.is_echo("to watch the rain")

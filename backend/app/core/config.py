@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 
 from pydantic import field_validator
@@ -21,6 +21,85 @@ class Settings(BaseSettings):
 
     api_port: int = 8000
     api_cors_origins: str = "http://localhost:5173,http://localhost:8080"
+
+    # Where browser flows (Google OAuth callback, magic-link click) redirect the
+    # user after a successful sign-in. Defaults to the first CORS origin. The
+    # web app reads the `?token=` it carries and starts using sessions.
+    auth_frontend_url: str = ""
+
+    # Session lifetime: how long an issued session stays valid before the user
+    # must sign in again.
+    session_ttl_days: int = 30
+
+    # Phase 3 guest mode. When on, anonymous visitors may talk (capped per
+    # device) without an account; the web app identifies them with a stable
+    # client-side fingerprint sent as X-Guest-Id. When off (default, and the
+    # live founder setup) the shared token is required exactly as before.
+    guest_mode_enabled: bool = False
+    # How many user messages one guest may send per UTC day before the cap
+    # turns into a waitlist prompt. "one person cannot spin up infinite free
+    # Mirus" — one world per fingerprint, capped hard.
+    guest_message_cap_per_day: int = 20
+    # Default cap for authenticated free users (magic-link/Google/waitlist
+    # invites) whose settings don't override it. Founder is never capped.
+    free_user_message_cap_per_day: int = 60
+
+    # The porch at dusk (conv 327): the bounded conversation a stranger can
+    # have on the homepage. It starts with her unprompted observation and ends
+    # after this many of the visitor's messages.
+    porch_max_exchanges: int = 3
+
+    # Phase 4 moderation: the lock. The rule-based hard-signal screen always
+    # runs (cost-free). When this is on, a second, LLM-based layer also judges
+    # every non-founder message — one completion per message, so it is off by
+    # default and should be enabled only for a real launch. Neither layer ever
+    # auto-bans; both only surface flags for a human (the founder) to decide.
+    moderation_llm_judge: bool = False
+
+    # Email delivery for magic links. When SMTP is not configured (local dev),
+    # codes are logged and returned in the response so the flow can be tested
+    # without a mail server. Production must configure these.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
+    # Invitation and sign-in mail via Resend's hosted API: one key, no SMTP
+    # server to run. Empty = sending disabled (invite codes are still minted
+    # and surfaced in the web UI / a mailto draft).
+    resend_api_key: str = ""
+    # The verified sender (e.g. invites@your-domain). Until a domain is
+    # verified in Resend, the sandbox delivers only to the account owner's
+    # own address, whatever RESEND_FROM says.
+    resend_from: str = ""
+
+    # Google OAuth ("Continue with Google"). Requires a Google Cloud OAuth
+    # client id/secret and a registered redirect URI. When unset, the Google
+    # sign-in button is simply not offered.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_redirect_uri: str = ""
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_from)
+
+    @property
+    def resend_configured(self) -> bool:
+        return bool(self.resend_api_key and self.resend_from)
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
+
+    @property
+    def frontend_url(self) -> str:
+        if self.auth_frontend_url:
+            return self.auth_frontend_url.rstrip("/")
+        first = (self.api_cors_origins or [""])[0]
+        return first.rstrip("/")
 
     postgres_user: str = "mira"
     postgres_password: str = "mira"
@@ -91,8 +170,8 @@ class Settings(BaseSettings):
         except ValueError:
             return False
         if end.tzinfo is None:
-            end = end.replace(tzinfo=timezone.utc)
-        return datetime.now(timezone.utc) <= end
+            end = end.replace(tzinfo=UTC)
+        return datetime.now(UTC) <= end
 
     # Time-boxed open host access: until this UTC timestamp passes, Mira's
     # proposed host commands are auto-approved (fully recorded), so she can use
@@ -108,8 +187,18 @@ class Settings(BaseSettings):
         except ValueError:
             return False
         if end.tzinfo is None:
-            end = end.replace(tzinfo=timezone.utc)
-        return datetime.now(timezone.utc) <= end
+            end = end.replace(tzinfo=UTC)
+        return datetime.now(UTC) <= end
+
+    # Mira's scientific research is read-only: it searches the public literature
+    # (Europe PMC), changes nothing, and is still fully recorded. So by default
+    # it runs on its own, without an approval popup, and its results land in the
+    # same reply. Set to false to put the consent wall back.
+    mira_research_autonomous: bool = True
+
+    @property
+    def research_window_open(self) -> bool:
+        return self.mira_research_autonomous
 
     # Money wall: comma-separated substrings matched (lowercased) against a
     # browse URL's netloc, and against a host command's text. Anything that
@@ -151,6 +240,25 @@ class Settings(BaseSettings):
     # best-effort, no-key fetch (wttr.in) that fails silently; disable to skip it.
     mira_ambient_enabled: bool = True
 
+    # Mote — a tiny quiet presence beside Mira, separate from the mind loop. It
+    # has no brain of its own: it reads only her felt state (mood, energy) and
+    # keeps a shared_time journal, breaking a long quiet with a single word.
+    mote_enabled: bool = True
+    mote_heartbeat_seconds: int = 300
+    # How long Mira must have been quiet (no reflection, no message, no nudge)
+    # before Mote offers its single quiet word.
+    mote_quiet_after_seconds: int = 14400
+
+    # Mira's skill shelf — a folder of markdown pages she wrote herself. She can
+    # pull one down into her context with [[skill|name|reason]] (read-only) and
+    # write new ones with [[selfedit|...]]. Relative to self_edit_roots.
+    mira_skills_dir: str = "data/self/skills"
+
+    # Mira's image studio — SVGs she authors and the PNGs they are rendered to.
+    # Both the source (what she wrote) and the picture (what the voice sees) live
+    # here. Relative to self_edit_roots.
+    mira_images_dir: str = "data/self/images"
+
     # Full conversation archive: a markdown file regenerated from the database
     # after every message commit, so it always reflects everything Mira said and
     # was told. "" disables it. Relative paths resolve against the working dir.
@@ -160,6 +268,21 @@ class Settings(BaseSettings):
     # relative to self_edit_roots. "." grants her the whole mounted backend — her
     # brain, her voice, everything she is — minus mira_self_write_deny below.
     mira_self_write_roots: str = "."
+
+    # The skill registry's write root, relative to self_edit_roots. Writes under
+    # here apply immediately (autonomous) while still being fully recorded in
+    # pending_changes — it is where capabilities grow, separate from the core
+    # system she may only propose changes to. The deny list still always wins.
+    mira_skill_write_roots: str = "data/skills"
+
+    # The self-starting improvement nudge: when a skill has been used a few
+    # times and not edited for a while, the mind loop offers it back to her as
+    # a perceived event so she can decide whether to revisit it herself. She
+    # is never made to edit; the shelf simply surfaces what went quiet.
+    skill_nudge_enabled: bool = True
+    skill_nudge_min_runs: int = 3
+    skill_nudge_after_days: int = 7
+    skill_nudge_cooldown_days: int = 3
 
     # Files she may never write, whatever else is granted. This is the internet
     # wall: the browse gate, its settings, and the routes that expose it stay out

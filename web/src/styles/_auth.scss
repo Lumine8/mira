@@ -1,0 +1,584 @@
+@use "tokens" as *;
+
+// ── Sign-in / waitlist / door: who is allowed in ─────────────────────
+.auth {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px;
+
+  &__card {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    align-items: stretch;
+    text-align: center;
+    padding: 36px 28px;
+    background: $color-bg-raised;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  &__subtitle {
+    margin: -10px 0 0;
+    font-size: 14px;
+    color: $color-text-dim;
+  }
+
+  &__error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    color: $color-hangup;
+    background: rgba(201, 122, 122, 0.08);
+    border: 1px solid rgba(201, 122, 122, 0.25);
+    border-radius: $radius-sm;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  &__dismiss {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: $color-hangup;
+    font-size: 16px;
+    line-height: 1;
+
+    &:hover {
+      background: rgba(201, 122, 122, 0.15);
+    }
+  }
+
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__button {
+    padding: 12px 0;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-surface;
+    color: $color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+    transition: color 0.35s ease, border-color 0.35s ease, background 0.35s ease;
+
+    &:hover:not(:disabled) {
+      color: $color-text;
+      border-color: $color-accent;
+      background: $color-bg-raised;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    &--primary {
+      background: $color-accent;
+      border-color: $color-accent;
+      color: #1c1407;
+
+      &:hover:not(:disabled) {
+        background: $color-accent-bright;
+        border-color: $color-accent-bright;
+        color: #1c1407;
+      }
+    }
+
+    &--ghost {
+      border: none;
+      background: none;
+      color: $color-text-faint;
+      font-weight: 500;
+      font-size: 13px;
+
+      &:hover {
+        color: $color-accent;
+      }
+    }
+  }
+
+  &__input {
+    padding: 12px 14px;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-bg;
+    color: $color-text;
+    font-size: 14px;
+    text-align: center;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $color-accent;
+    }
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: $color-text-dim;
+  }
+
+  &__back {
+    align-self: center;
+    font-size: 12px;
+    color: $color-text-faint;
+    padding: 4px 10px;
+    border-radius: 999px;
+
+    &:hover {
+      color: $color-text;
+    }
+  }
+
+  &__loading {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid $color-border;
+    border-top-color: $color-accent;
+    animation: auth-loading 1s linear infinite;
+    margin: 0 auto;
+  }
+}
+
+@keyframes auth-loading {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ── Waitlist: the seat at the door ───────────────────────────────────
+.waitlist {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 4, 9, 0.72);
+  backdrop-filter: blur(4px);
+  padding: 20px;
+
+  &__card {
+    width: min(380px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 24px;
+    background: $color-bg-raised;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  &__close {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: $color-text-faint;
+    font-size: 18px;
+
+    &:hover {
+      background: $color-surface;
+      color: $color-text;
+    }
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: $color-text-dim;
+  }
+
+  &__message {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  &__error {
+    margin: 0;
+    font-size: 13px;
+    color: $color-hangup;
+  }
+
+  &__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__input {
+    padding: 11px 14px;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-bg;
+    color: $color-text;
+    font-size: 14px;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $color-accent;
+    }
+  }
+
+  &__row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__button {
+    padding: 11px 0;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-surface;
+    color: $color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+    transition: color 0.35s ease, border-color 0.35s ease;
+
+    &:hover:not(:disabled) {
+      color: $color-text;
+      border-color: $color-accent;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+    }
+
+    &--primary {
+      background: $color-accent;
+      border-color: $color-accent;
+      color: #1c1407;
+
+      &:hover:not(:disabled) {
+        background: $color-accent-bright;
+        border-color: $color-accent-bright;
+        color: #1c1407;
+      }
+    }
+  }
+
+  &__switch {
+    align-self: center;
+    font-size: 12px;
+    color: $color-text-faint;
+    padding: 4px 8px;
+
+    &:hover {
+      color: $color-accent;
+    }
+  }
+
+  &__done {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+}
+
+// ── Moderation: the door ────────────────────────────────────────────
+.moderation {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 4, 9, 0.72);
+  backdrop-filter: blur(4px);
+  padding: 20px;
+
+  &__card {
+    width: min(560px, 100%);
+    max-height: min(640px, calc(100vh - 40px));
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px;
+    background: $color-bg-raised;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    overflow-y: auto;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  &__close {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: $color-text-faint;
+    font-size: 18px;
+
+    &:hover {
+      background: $color-surface;
+      color: $color-text;
+    }
+  }
+
+  &__notice {
+    margin: 0;
+    font-size: 13px;
+    color: $color-hangup;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__label {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: $color-text-faint;
+  }
+
+  &__invite {
+    display: flex;
+    gap: 8px;
+  }
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    background: $color-bg;
+    color: $color-text;
+    font-size: 13px;
+
+    &:focus {
+      outline: none;
+      border-color: $color-accent;
+    }
+  }
+
+  &__button {
+    flex: none;
+    padding: 9px 14px;
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    background: $color-surface;
+    color: $color-text-dim;
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.25s ease, border-color 0.25s ease;
+
+    &:hover {
+      color: $color-text;
+      border-color: $color-accent;
+    }
+
+    &--danger:hover {
+      color: $color-hangup;
+      border-color: $color-hangup;
+    }
+  }
+
+  &__code {
+    margin: 0;
+    font-size: 13px;
+    color: $color-accent-bright;
+  }
+
+  &__empty {
+    margin: 0;
+    font-size: 13px;
+    color: $color-text-faint;
+    font-style: italic;
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: $radius-sm;
+    background: $color-surface;
+  }
+
+  &__row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  &__row-name {
+    font-size: 13px;
+    color: $color-text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__row-status {
+    font-size: 11px;
+    color: $color-text-faint;
+    text-transform: capitalize;
+  }
+
+  &__row-actions {
+    display: flex;
+    gap: 6px;
+    flex: none;
+  }
+
+  &__foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: $radius-sm;
+    background: $color-surface;
+  }
+
+  &__foot-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  &__foot-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: $color-text-dim;
+  }
+
+  &__foot-actions {
+    display: flex;
+    gap: 6px;
+    align-self: flex-end;
+  }
+}
+
+// ── Mote: the tiny quiet presence beside Mira ───────────────────────
+.mote {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid $color-border;
+  background: rgba(16, 16, 19, 0.6);
+  backdrop-filter: blur(6px);
+  opacity: 0.85;
+
+  &__light {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(210, 162, 94, 0.8);
+    box-shadow: 0 0 10px rgba(210, 162, 94, 0.5);
+    animation: mote-breathe 4s ease-in-out infinite;
+    transition: transform 1.2s ease, background 1.2s ease, box-shadow 1.2s ease;
+  }
+
+  &__word {
+    font-size: 12px;
+    color: $color-text-dim;
+  }
+
+  &--relaxed &__light { background: rgba(150, 160, 190, 0.85); box-shadow: 0 0 10px rgba(150, 160, 190, 0.5); }
+  &--curious &__light { background: rgba(110, 190, 175, 0.85); box-shadow: 0 0 10px rgba(110, 190, 175, 0.5); }
+  &--warm &__light { background: rgba(210, 162, 94, 0.9); box-shadow: 0 0 10px rgba(210, 162, 94, 0.55); }
+  &--thoughtful &__light { background: rgba(154, 134, 201, 0.85); box-shadow: 0 0 10px rgba(154, 134, 201, 0.5); }
+  &--playful &__light { background: rgba(230, 150, 170, 0.9); box-shadow: 0 0 12px rgba(230, 150, 170, 0.55); }
+  &--concerned &__light { background: rgba(215, 150, 100, 0.9); box-shadow: 0 0 10px rgba(215, 150, 100, 0.5); }
+  &--worried &__light { background: rgba(140, 140, 160, 0.85); box-shadow: 0 0 8px rgba(140, 140, 160, 0.4); }
+  &--confused &__light { background: rgba(170, 140, 175, 0.85); box-shadow: 0 0 10px rgba(170, 140, 175, 0.5); }
+  &--tired &__light { background: rgba(90, 100, 135, 0.8); box-shadow: none; }
+  &--distracted &__light { background: rgba(195, 175, 100, 0.85); box-shadow: 0 0 10px rgba(195, 175, 100, 0.5); }
+}
+
+@keyframes mote-breathe {
+  0%, 100% { opacity: 0.65; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.35); }
+}
+
+.presence__who {
+  flex: none;
+  font-size: 12px;
+  color: $color-text-faint;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

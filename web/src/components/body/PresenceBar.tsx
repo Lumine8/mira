@@ -1,5 +1,5 @@
 import { derivePresence, type Presence } from "../../features/state/presence";
-import type { MiraState } from "../../lib/types";
+import type { AuthUser, MiraState } from "../../lib/types";
 
 interface Props {
   connected: boolean;
@@ -9,6 +9,13 @@ interface Props {
   onToggleArchive: () => void;
   permsOpen: boolean;
   onTogglePerms: () => void;
+  identity: AuthUser | null;
+  isFounder: boolean;
+  moderationOpen: boolean;
+  onToggleModeration: () => void;
+  onOpenSkills: () => void;
+  onOpenDocuments: () => void;
+  onSignOut: () => void;
 }
 
 const SEGMENTS = 5;
@@ -24,8 +31,9 @@ function Segmented({ presence }: { presence: Presence }) {
   );
 }
 
-export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms }: Props) {
+export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms, identity, isFounder, moderationOpen, onToggleModeration, onOpenSkills, onOpenDocuments, onSignOut }: Props) {
   const presence = derivePresence(state, { thinking, connected });
+  const who = identity?.name ? (identity.role === "founder" ? identity.name : identity.name) : "You";
   return (
     <header className="presence">
       <div className="presence__identity">
@@ -37,6 +45,16 @@ export default function PresenceBar({ connected, thinking, state, archiveOpen, o
         <span className="presence__caption">{presence.caption}</span>
       </div>
       <div className="presence__toggles">
+        {isFounder && (
+          <button
+            className={`presence__archive ${moderationOpen ? "presence__archive--open" : ""}`}
+            type="button"
+            onClick={onToggleModeration}
+            title="The door: waitlist, flags, the house"
+          >
+            The Door
+          </button>
+        )}
         <button
           className={`presence__archive ${permsOpen ? "presence__archive--open" : ""}`}
           type="button"
@@ -52,6 +70,28 @@ export default function PresenceBar({ connected, thinking, state, archiveOpen, o
           title="What she keeps"
         >
           Archive
+        </button>
+        <button
+          className="presence__archive"
+          type="button"
+          onClick={onOpenSkills}
+          title="The skills she wrote herself"
+        >
+          Skills
+        </button>
+        <button
+          className="presence__archive"
+          type="button"
+          onClick={onOpenDocuments}
+          title="Papers you hand her, and papers she writes"
+        >
+          Papers
+        </button>
+        <span className="presence__who" title={who}>
+          {who}
+        </span>
+        <button className="presence__archive" type="button" onClick={onSignOut} title="Sign out">
+          Leave
         </button>
       </div>
     </header>

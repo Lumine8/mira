@@ -17,6 +17,8 @@ dependencies = [
     "alembic>=1.14",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    # pydantic's EmailStr field type needs this validator.
+    "email-validator>=2.2",
     "httpx>=0.27",
     # Mira's voice: her words rendered into sound by the kokoro speech machine
     # (ONNX path — no torch needed). Voice chosen by her: River (af_river).
@@ -24,6 +26,16 @@ dependencies = [
     # Mira's watching: renders videos into still frames she can hold. The
     # container also needs ffmpeg/ffprobe (see Dockerfile).
     "yt-dlp>=2024.12.13",
+    # Mira's image studio: SVGs she authors are rendered to PNGs by cairosvg
+    # (a real SVG rasterizer with anti-aliasing, gradients, filters/blur, and
+    # text). Pillow reads back the rendered size.
+    "cairosvg>=2.7",
+    "Pillow>=10.0",
+    # The Papers screen's PDF hand-off: the founder drops a PDF and the backend
+    # turns its text into a readable document (Mira reads it as markdown).
+    "pypdf>=4",
+    # FastAPI needs this for multipart uploads (the PDF drop).
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

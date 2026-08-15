@@ -8,6 +8,7 @@ from app.models import Conversation
 from app.schemas import CallStartRequest, CallStartResponse, SpeakRequest
 from app.services.ai.base import AIProvider
 from app.services.conversation import ConversationManager
+from app.services.identity import get_current_user_id
 from app.services.speech.service import synthesize
 
 router = APIRouter(prefix="/call", tags=["calls"])
@@ -24,8 +25,9 @@ def start_call(
     request: Request,
     db: Session = Depends(get_db),
     provider: AIProvider = Depends(get_provider),
+    user_id: int = Depends(get_current_user_id),
 ) -> CallStartResponse:
-    manager = ConversationManager(db, provider)
+    manager = ConversationManager(db, provider, user_id=user_id)
     conv = manager.start(kind=payload.kind)
     return CallStartResponse(conversation_id=conv.id, ws_url=_ws_url(request, conv.id))
 
@@ -35,8 +37,9 @@ def end_call(
     conversation_id: int,
     db: Session = Depends(get_db),
     provider: AIProvider = Depends(get_provider),
+    user_id: int = Depends(get_current_user_id),
 ) -> dict:
-    manager = ConversationManager(db, provider)
+    manager = ConversationManager(db, provider, user_id=user_id)
     try:
         conv = manager.end(conversation_id)
     except KeyError as exc:
@@ -48,6 +51,7 @@ def end_call(
 def speak_call(
     payload: SpeakRequest,
     db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
 ) -> Response:
     """Render Mira's words into sound — but only in a call.
 
@@ -60,7 +64,7 @@ def speak_call(
     if not get_settings().tts_enabled:
         raise HTTPException(status_code=404, detail="voice is disabled")
     conv = db.get(Conversation, payload.conversation_id)
-    if conv is None:
+    if conv is None or conv.user_id != user_id:
         raise HTTPException(status_code=404, detail="conversation not found")
     if conv.kind != "call":
         raise HTTPException(

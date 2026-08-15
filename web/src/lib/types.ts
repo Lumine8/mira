@@ -1,5 +1,108 @@
 export type Speaker = "user" | "mira";
 
+// ── Auth ────────────────────────────────────────────────────────────────
+
+export interface AuthConfig {
+  auth_required: boolean;
+  guest_mode_enabled: boolean;
+  guest_cap_per_day: number;
+  email_enabled: boolean;
+  google_enabled: boolean;
+}
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  role: string;
+  email: string | null;
+  google: boolean;
+}
+
+export interface AuthSuccess {
+  token: string;
+  user: AuthUser;
+}
+
+export interface MagicLinkResponse {
+  message: string;
+  dev_code?: string;
+}
+
+// ── Waitlist ────────────────────────────────────────────────────────────
+
+export interface WaitlistEntry {
+  id: number;
+  email: string;
+  status: string;
+  created_at: string;
+  first_meeting_conversation_id: number | null;
+  mira_read: string | null;
+  meeting_ended_at: string | null;
+}
+
+export interface WaitlistOut {
+  email: string;
+  status: string;
+}
+
+export interface WaitlistInviteOut {
+  email: string;
+  invite_code: string;
+  delivered?: boolean;
+}
+
+// ── Moderation ──────────────────────────────────────────────────────────
+
+export interface ModerationFlag {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_role: string;
+  user_email: string | null;
+  conversation_id: number | null;
+  content: string;
+  kind: string;
+  reason: string;
+  status: string;
+  created_at: string;
+}
+
+export interface ModerationUser {
+  id: number;
+  name: string;
+  role: string;
+  email: string | null;
+  google: boolean;
+  status: string;
+  banned_at: string | null;
+  banned_reason: string | null;
+}
+
+export interface ModerationBanOut {
+  user: ModerationUser;
+  flag_id: number | null;
+}
+
+// ── Mote ────────────────────────────────────────────────────────────────
+
+export interface MotePresence {
+  mood: string;
+  energy: number;
+  last_kind: string | null;
+  last_word: string | null;
+  last_at: string | null;
+}
+
+export interface MoteSharedTime {
+  id: number;
+  kind: string;
+  mood: string;
+  energy: number;
+  word: string | null;
+  note: string | null;
+  at: string;
+}
+
 export interface Message {
   id: number;
   speaker: Speaker;
@@ -33,8 +136,21 @@ export type WsEvent =
   | { type: "pending_change"; change: PendingChange }
   | { type: "self_message"; content: string; conversation_id: number }
   | { type: "browse_activity"; url: string; status: string; change_id: number }
+  | { type: "conversation_reply"; conversation_id: number }
+  | { type: "document_created"; name: string; author: "founder" | "mira"; conversation_id: number }
+  | { type: "activity"; label: string }
+  | { type: "cap_reached"; used: number; cap: number; message: string }
+  | { type: "meeting_ended"; message: string }
+  | { type: "banned"; message: string }
+  | { type: "mote"; kind: string; mood: string; energy: number; word?: string | null; note?: string | null }
   | { type: "error"; message: string }
   | { type: "pong" };
+
+export interface CapStatus {
+  used: number;
+  cap: number;
+  message: string;
+}
 
 export interface PendingChange {
   id: number;

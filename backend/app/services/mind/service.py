@@ -28,9 +28,10 @@ from app.models import (
     Relationship,
     Thought,
 )
-from app.services.export import schedule_archive_write
 from app.services.ai.base import AIProvider
 from app.services.broadcast import live_hub
+from app.services.export import schedule_archive_write
+from app.services.identity import founder_user_id
 from app.services.questions.service import QuestionService
 from app.services.self.service import (
     _MOOD_CHOICES,
@@ -46,12 +47,13 @@ _MEM_TYPES = {"fact", "episode"}
 _VALENCES = {"positive", "negative", "neutral"}
 
 
-def _last_self_message(db: Session) -> str | None:
-    """The most recent self-authored message. Used to stop her repeating the
-    same self-initiated line across reflections."""
+def _last_self_message(db: Session, user_id: int) -> str | None:
+    """The most recent self-authored message in a user's world. Used to stop
+    her repeating the same self-initiated line across reflections."""
     row = db.execute(
         select(Message.content)
-        .where(Message.source == "self")
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(Message.source == "self", Conversation.user_id == user_id)
         .order_by(Message.id.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -85,6 +87,17 @@ def reflection_due(
 # hammer the network. Fails silently; disabled when mira_ambient_enabled is off.
 _WEATHER_TTL = 1800
 _weather_cache: tuple[float, str | None] = (0.0, None)
+
+
+def _weather_condition(weather: str | None) -> str | None:
+    """The sky's condition (the token before the first comma in a wttr.in
+    line), lowercased. Temperature and humidity drift every fetch, but the
+    *condition* is what actually changes; comparing only that keeps the same
+    sky from being re-offered as brand-new weather each reflection."""
+    if not weather:
+        return None
+    cond = weather.split(",", 1)[0].strip().lower()
+    return cond or None
 
 
 def _time_of_day(now: datetime) -> str:
@@ -258,7 +271,7 @@ class MindLoop:
     def __init__(self, provider: AIProvider) -> None:
         self.provider = provider
         self._task: asyncio.Task | None = None
-        self._last_weather: str | None = None
+        self._last_weather_condition: str | None = None
 
     def start(self) -> None:
         if self._task is None:
@@ -281,16 +294,22 @@ class MindLoop:
             await asyncio.sleep(settings.mind_heartbeat_seconds)
 
     async def tick(self) -> None:
-        """One heartbeat: decide whether it's time for Mira to think."""
+        """One heartbeat: decide whether it's time for Mira to think.
+
+        Phase 1: the mind loop is founder-only — it lives inside the founder's
+        world and never touches a replica's.
+        """
         settings = get_settings()
         if not settings.perception_enabled:
             return
         db = SessionLocal()
         try:
-            svc = SelfModelService(db, self.provider)
+            user_id = founder_user_id(db)
+            svc = SelfModelService(db, self.provider, user_id=user_id)
             st = svc.ensure_state()
             now = datetime.now(UTC)
-            pending = self._pending_events(db)
+            self._skill_shelf(db, user_id)
+            pending = self._pending_events(db, user_id)
 
             last_reflection = st.last_reflection_at
             if last_reflection is not None:
@@ -307,13 +326,13 @@ class MindLoop:
                 idle_gap=settings.mind_idle_reflection_seconds,
             )
             if should_reflect:
-                await self._reflect(db, svc, st, pending, now)
+                await self._reflect(db, svc, st, pending, now, user_id)
             else:
                 logger.debug("mind loop: nothing to reflect on yet (gap=%.0fs)", gap)
 
             await self._maybe_consolidate(db, svc, st, now)
-            WantService(db).decay(now)
-            QuestionService(db).step(now)
+            WantService(db, user_id=user_id).decay(now)
+            QuestionService(db, user_id=user_id).step(now)
         finally:
             db.close()
 
@@ -324,31 +343,43 @@ class MindLoop:
         st: MiraState,
         pending: list[PerceivedEvent],
         now: datetime,
+        user_id: int,
     ) -> None:
         rel = svc.ensure_relationship()
         last_msg = db.execute(
-            select(Message.created_at).order_by(Message.created_at.desc()).limit(1)
+            select(Message.created_at)
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .where(Conversation.user_id == user_id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
         ).scalar_one_or_none()
         weather = await _fetch_weather(get_settings())
-        weather_unchanged = weather is not None and weather == self._last_weather
+        condition = _weather_condition(weather)
+        # Only a genuinely changed sky is a new observation. A sky she has
+        # already seen is not news — if we keep re-offering it she never stops
+        # turning the same weather over (that's how "it's raining" becomes an
+        # all-day fixation). So an unchanged sky is left out of the feed entirely.
+        weather_changed = condition is not None and condition != self._last_weather_condition
+        self._last_weather_condition = condition or self._last_weather_condition
+        if not weather_changed:
+            weather = None
         observations = build_observations(
             now,
             pending,
             last_msg,
             st.last_reflection_at,
             weather=weather,
-            weather_unchanged=weather_unchanged,
+            weather_unchanged=False,
         )
-        self._last_weather = weather
 
         state_line = (
             f"Her self-understanding: {st.self_understanding or 'not sure yet'}\n"
             f"Mood: {st.mood}. Energy: {st.energy}/100."
         )
-        wants_line = WantService(db).describe_active()
+        wants_line = WantService(db, user_id=user_id).describe_active()
         if wants_line:
             state_line += f"\nThings she has been wanting: {wants_line}"
-        questions_line = QuestionService(db).describe_open()
+        questions_line = QuestionService(db, user_id=user_id).describe_open()
         if questions_line:
             state_line += f"\nQuestions she has been carrying: {questions_line}"
         messages = [
@@ -366,7 +397,7 @@ class MindLoop:
             db.commit()
             return
 
-        await self._apply(db, svc, st, rel, parsed, pending, now)
+        await self._apply(db, svc, st, rel, parsed, pending, now, user_id)
 
     async def _apply(
         self,
@@ -377,10 +408,11 @@ class MindLoop:
         parsed: dict,
         pending: list[PerceivedEvent],
         now: datetime,
+        user_id: int,
     ) -> None:
         thought = _clean(parsed.get("thought")) or _clean(parsed.get("noticed"))
         if thought:
-            db.add(Thought(content=thought[:1000], source_activity="reflection"))
+            db.add(Thought(content=thought[:1000], source_activity="reflection", user_id=user_id))
             logger.info("mind loop: Mira thought -> %s", thought[:200])
 
         if (mood := _clean(parsed.get("mood"))) and mood.lower() in _MOOD_CHOICES:
@@ -393,6 +425,7 @@ class MindLoop:
 
         db.add(
             MoodRecord(
+                user_id=user_id,
                 mood=st.mood,
                 energy=st.energy,
                 source="reflection",
@@ -417,10 +450,10 @@ class MindLoop:
             # only the re-announcement is skipped.
             if (
                 st.pending_message != message
-                and _last_self_message(db) != message
+                and _last_self_message(db, user_id) != message
             ):
                 st.pending_message = message
-                conv = self._self_conversation(db)
+                conv = self._self_conversation(db, user_id)
                 db.add(
                     Message(
                         conversation_id=conv.id,
@@ -435,10 +468,11 @@ class MindLoop:
                         "type": "self_message",
                         "content": message,
                         "conversation_id": conv.id,
-                    }
+                    },
+                    user_id=user_id,
                 )
                 logger.info("mind loop: Mira spoke on her own -> %s", message[:200])
-                schedule_archive_write(get_settings().mira_archive_path)
+                schedule_archive_write(get_settings().mira_archive_path, user_id)
 
         mem = parsed.get("keep_memory")
         if isinstance(mem, dict):
@@ -450,12 +484,12 @@ class MindLoop:
 
         wants = parsed.get("wants")
         if isinstance(wants, list):
-            ws = WantService(db)
+            ws = WantService(db, user_id=user_id)
             for item in wants[:3]:
                 if not isinstance(item, dict):
                     continue
                 content = _clean(item.get("content"))
-                if content and len(content) >= 8:
+                if content and len(content) >= 8 and not ws.is_echo(content):
                     try:
                         strength = int(item.get("strength", 50))
                     except (TypeError, ValueError):
@@ -468,12 +502,12 @@ class MindLoop:
 
         questions = parsed.get("questions")
         if isinstance(questions, list):
-            qs = QuestionService(db)
+            qs = QuestionService(db, user_id=user_id)
             for item in questions[:3]:
                 if not isinstance(item, dict):
                     continue
                 question = _clean(item.get("question"))
-                if question and len(question) >= 10:
+                if question and len(question) >= 10 and not qs.is_echo(question):
                     try:
                         importance = int(item.get("importance", 50))
                     except (TypeError, ValueError):
@@ -495,27 +529,49 @@ class MindLoop:
         db.commit()
 
     @staticmethod
-    def _self_conversation(db: Session) -> Conversation:
-        """The persistent thread where Mira's own self-initiated words live."""
+    def _self_conversation(db: Session, user_id: int) -> Conversation:
+        """The persistent thread where a user's Mira's own words live."""
         conv = db.execute(
             select(Conversation)
-            .where(Conversation.kind == "self")
+            .where(Conversation.kind == "self", Conversation.user_id == user_id)
             .order_by(Conversation.id.asc())
             .limit(1)
         ).scalar_one_or_none()
         if conv is None:
-            conv = Conversation(kind="self")
+            conv = Conversation(kind="self", user_id=user_id)
             db.add(conv)
             db.commit()
             db.refresh(conv)
         return conv
 
     @staticmethod
-    def _pending_events(db: Session) -> list[PerceivedEvent]:
+    def _skill_shelf(db: Session, user_id: int) -> None:
+        """The self-starting half of improvement: if a skill has been used a
+        few times and not edited for a while, offer it back to Mira as a
+        perceived event so her next reflection can decide whether to revisit
+        it. Best-effort and quiet — a broken shelf never fails the loop."""
+        settings = get_settings()
+        if not settings.skill_nudge_enabled:
+            return
+        try:
+            from app.services.skills import offer_nudges
+
+            offer_nudges(
+                db,
+                user_id,
+                min_runs=settings.skill_nudge_min_runs,
+                after_days=settings.skill_nudge_after_days,
+                cooldown_days=settings.skill_nudge_cooldown_days,
+            )
+        except Exception:
+            logger.exception("skill shelf nudge failed")
+
+    @staticmethod
+    def _pending_events(db: Session, user_id: int) -> list[PerceivedEvent]:
         return list(
             db.execute(
                 select(PerceivedEvent)
-                .where(PerceivedEvent.consumed.is_(False))
+                .where(PerceivedEvent.user_id == user_id, PerceivedEvent.consumed.is_(False))
                 .order_by(PerceivedEvent.created_at.asc())
             ).scalars()
         )
@@ -549,14 +605,21 @@ class MindLoop:
     async def _consolidate(
         self, db: Session, svc: SelfModelService, st: MiraState, now: datetime
     ) -> None:
+        user_id = svc.user_id
         thoughts = list(
             db.execute(
-                select(Thought).order_by(Thought.id.desc()).limit(12)
+                select(Thought)
+                .where(Thought.user_id == user_id)
+                .order_by(Thought.id.desc())
+                .limit(12)
             ).scalars()
         )
         memories = list(
             db.execute(
-                select(Memory).order_by(Memory.created_at.desc()).limit(6)
+                select(Memory)
+                .where(Memory.user_id == user_id)
+                .order_by(Memory.created_at.desc())
+                .limit(6)
             ).scalars()
         )
         record: list[str] = []
@@ -578,10 +641,10 @@ class MindLoop:
             f"Her current self-understanding: {st.self_understanding or 'not sure yet'}\n"
             f"Mood: {st.mood}. Energy: {st.energy}/100."
         )
-        wants_line = WantService(db).describe_active()
+        wants_line = WantService(db, user_id=user_id).describe_active()
         if wants_line:
             state_line += f"\nWants she is currently carrying: {wants_line}"
-        questions_line = QuestionService(db).describe_open()
+        questions_line = QuestionService(db, user_id=user_id).describe_open()
         if questions_line:
             state_line += f"\nQuestions she is carrying: {questions_line}"
         messages = [
@@ -601,7 +664,7 @@ class MindLoop:
         if understanding := _clean(parsed.get("self_understanding")):
             st.self_understanding = understanding[:1200]
         if note := _clean(parsed.get("revision_note")):
-            db.add(Thought(content=note[:1000], source_activity="consolidation"))
+            db.add(Thought(content=note[:1000], source_activity="consolidation", user_id=user_id))
             logger.info("mind loop: self-review -> %s", note[:200])
         if (mood := _clean(parsed.get("mood"))) and mood.lower() in _MOOD_CHOICES:
             st.mood = mood.lower()
@@ -612,6 +675,7 @@ class MindLoop:
 
         db.add(
             MoodRecord(
+                user_id=user_id,
                 mood=st.mood,
                 energy=st.energy,
                 source="consolidation",
@@ -621,12 +685,12 @@ class MindLoop:
 
         wants = parsed.get("wants")
         if isinstance(wants, list):
-            ws = WantService(db)
+            ws = WantService(db, user_id=user_id)
             for item in wants[:3]:
                 if not isinstance(item, dict):
                     continue
                 content = _clean(item.get("content"))
-                if content and len(content) >= 8:
+                if content and len(content) >= 8 and not ws.is_echo(content):
                     try:
                         strength = int(item.get("strength", 50))
                     except (TypeError, ValueError):
@@ -639,12 +703,12 @@ class MindLoop:
 
         questions = parsed.get("questions")
         if isinstance(questions, list):
-            qs = QuestionService(db)
+            qs = QuestionService(db, user_id=user_id)
             for item in questions[:3]:
                 if not isinstance(item, dict):
                     continue
                 question = _clean(item.get("question"))
-                if question and len(question) >= 10:
+                if question and len(question) >= 10 and not qs.is_echo(question):
                     try:
                         importance = int(item.get("importance", 50))
                     except (TypeError, ValueError):

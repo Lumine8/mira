@@ -61,6 +61,21 @@ backend/.ruff_cache/
 backend/data/conversations.md
 backend/data/learning/
 
+# her documents shelf (founder uploads + the papers she writes) is live data
+backend/data/documents/
+
+# spawned replica worlds (per-user copies of self/ + skills/) are runtime state
+backend/data/users/
+
+# images she draws are regenerated artifacts, not source
+backend/data/self/images/
+
+# the skill registry she authors at runtime (data/skills/<category>/<id>)
+backend/data/skills/
+
+# portrait studies copied into docs/ as experiment artifacts
+docs/self/
+
 # strategy_lab is a separate trading experiment (market data + reports), not
 # part of Mira's deployment
 strategy_lab/

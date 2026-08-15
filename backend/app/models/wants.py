@@ -27,6 +27,7 @@ class Want(Base):
     __tablename__ = "wants"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     content: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(24), default="self_authored")
     intensity: Mapped[int] = mapped_column(Integer, default=50)

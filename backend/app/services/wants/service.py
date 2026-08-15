@@ -70,16 +70,17 @@ def reinforce(intensity: int, tension: int, strength: int) -> tuple[int, int]:
 
 
 class WantService:
-    """Thin DB layer over the want dynamics above."""
+    """Thin DB layer over the want dynamics above. Scoped to one user's world."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, *, user_id: int) -> None:
         self.db = db
+        self.user_id = user_id
 
     def list_active(self, limit: int = 20) -> list[Want]:
         return list(
             self.db.execute(
                 select(Want)
-                .where(Want.status == "active")
+                .where(Want.user_id == self.user_id, Want.status == "active")
                 .order_by(Want.tension.desc(), Want.id.asc())
                 .limit(limit)
             ).scalars()
@@ -88,9 +89,22 @@ class WantService:
     def list_recent(self, limit: int = 40) -> list[Want]:
         return list(
             self.db.execute(
-                select(Want).order_by(Want.updated_at.desc()).limit(limit)
+                select(Want)
+                .where(Want.user_id == self.user_id)
+                .order_by(Want.updated_at.desc())
+                .limit(limit)
             ).scalars()
         )
+
+    def is_echo(self, content: str) -> bool:
+        """True when ``content`` is the reflection re-listing a want she is
+        already carrying (an echo of the prompt's own active list). Echoes are
+        not new evidence of a want — they are the loop feeding on itself — so
+        the caller can drop them before they touch the DB at all."""
+        text = content.strip()
+        if not text:
+            return False
+        return any(wants_match(w.content, text) for w in self.list_active(limit=100))
 
     def describe_active(self, limit: int = 5) -> str:
         """One line for the reflection/consolidation inputs: the wants she is
@@ -138,6 +152,7 @@ class WantService:
             tension=0,
             status="active",
             related_conversation_id=conversation_id,
+            user_id=self.user_id,
         )
         self.db.add(w)
         self.db.commit()
@@ -163,7 +178,9 @@ class WantService:
     def satisfy(self, want_id: int) -> Want | None:
         """Mark a want satisfied: she got what she wanted, or decided to let it
         go. Tension clears; the want fades out of the active set."""
-        w = self.db.get(Want, want_id)
+        w = self.db.execute(
+            select(Want).where(Want.id == want_id, Want.user_id == self.user_id)
+        ).scalar_one_or_none()
         if w is None:
             return None
         w.status = "satisfied"

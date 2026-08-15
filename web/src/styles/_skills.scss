@@ -1,0 +1,520 @@
+@use "tokens" as *;
+
+// ── Her shelf: the skills she wrote for herself ──
+// Matches the design language: quiet, dark, amber accents, restrained.
+
+.skills {
+  max-width: 860px;
+  max-height: 100%;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  &__header {
+    margin-bottom: 32px;
+  }
+
+  &__back {
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: $color-text-dim;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 14px;
+
+    &:hover {
+      color: $color-accent;
+    }
+  }
+
+  &__title {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    color: $color-text;
+  }
+
+  &__subtitle {
+    font-size: 14px;
+    color: $color-text-dim;
+    margin: 0;
+  }
+
+  &__error {
+    padding: 14px 16px;
+    border-radius: $radius-md;
+    background: $color-surface;
+    border: 1px solid rgba(201, 122, 122, 0.4);
+    color: #c97a7a;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  &__loading {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid $color-border;
+    border-top-color: $color-accent;
+    animation: skills-spin 0.9s linear infinite;
+    margin: 40px auto;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+
+    @media (max-width: 720px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  &__card {
+    text-align: left;
+    background: rgba(22, 22, 24, 0.6);
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    padding: 18px 18px 14px;
+    cursor: pointer;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+    color: $color-text;
+
+    &:hover {
+      border-color: $color-accent-soft;
+      transform: translateY(-1px);
+    }
+
+    &-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    &-id {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    &-status {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: $color-text-faint;
+      margin-bottom: 10px;
+    }
+
+    &-purpose {
+      font-size: 13px;
+      line-height: 1.5;
+      color: $color-text-dim;
+      margin: 0 0 14px;
+    }
+
+    &-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      color: $color-text-faint;
+      letter-spacing: 0.04em;
+    }
+  }
+
+  &__empty {
+    grid-column: 1 / -1;
+    color: $color-text-dim;
+    font-size: 14px;
+    text-align: center;
+    padding: 48px 0;
+  }
+
+  // ── detail ──
+  &__detail {
+    &-head {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 6px;
+    }
+
+    &-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      font-size: 22px;
+
+      h2 {
+        margin: 0;
+        font-weight: 600;
+      }
+    }
+
+    &-purpose {
+      font-size: 15px;
+      line-height: 1.55;
+      color: $color-text-dim;
+      max-width: 640px;
+      margin: 0 0 28px;
+    }
+
+    &-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 26px;
+
+      @media (max-width: 720px) {
+        grid-template-columns: 1fr;
+      }
+    }
+  }
+
+  &__section {
+    background: rgba(22, 22, 24, 0.55);
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    padding: 16px 18px;
+    margin-bottom: 26px;
+
+    h3 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: $color-text-faint;
+      margin: 0 0 10px;
+    }
+  }
+
+  &__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      font-size: 13px;
+      line-height: 1.5;
+      color: $color-text-dim;
+      padding: 3px 0;
+      position: relative;
+      padding-left: 14px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.75em;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: $color-accent-soft;
+        border: 1px solid $color-accent;
+      }
+    }
+  }
+
+  &__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+
+    &--active {
+      background: $color-observing;
+      box-shadow: 0 0 8px rgba(127, 174, 138, 0.35);
+    }
+
+    &--draft {
+      background: $color-accent;
+      box-shadow: 0 0 8px rgba(210, 162, 94, 0.3);
+    }
+
+    &--deprecated {
+      background: $color-resting;
+    }
+  }
+
+  &__version {
+    font-size: 11px;
+    color: $color-text-faint;
+    letter-spacing: 0.06em;
+  }
+
+  &__score {
+    font-size: 30px;
+    font-weight: 500;
+    color: $color-accent;
+    letter-spacing: -0.02em;
+  }
+
+  &__dims {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin-top: 14px;
+  }
+
+  &__dim {
+    font-size: 12px;
+    color: $color-text-dim;
+
+    strong {
+      color: $color-text;
+    }
+  }
+
+  &__muted {
+    font-size: 13px;
+    color: $color-text-faint;
+    margin: 8px 0 0;
+  }
+
+  &__page {
+    white-space: pre-wrap;
+    font-family: $font-stack;
+    font-size: 13px;
+    line-height: 1.6;
+    color: $color-text-dim;
+    margin: 0;
+  }
+
+  // ── runs & the prove-it pane ──
+  &__runs {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__run {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 13px;
+    padding: 6px 0;
+
+    &-task {
+      color: $color-text-dim;
+      flex: 1;
+    }
+
+    &-status {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: $color-text-faint;
+    }
+
+    &--failed .skills__run-status {
+      color: #c97a7a;
+    }
+
+    &--ran .skills__run-status {
+      color: $color-observing;
+    }
+
+    &-error {
+      flex-basis: 100%;
+      font-size: 12px;
+      color: #c97a7a;
+      margin-left: 0;
+    }
+  }
+
+  &__input,
+  &__textarea {
+    display: block;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    color: $color-text;
+    font-family: $font-stack;
+    font-size: 13px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $color-accent-soft;
+    }
+  }
+
+  &__textarea {
+    min-height: 84px;
+    resize: vertical;
+  }
+
+  &__cta {
+    background: $color-surface;
+    border: 1px solid $color-accent-soft;
+    color: $color-accent;
+    border-radius: $radius-sm;
+    font-size: 13px;
+    padding: 9px 16px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+
+    &:hover:not(:disabled) {
+      background: rgba(210, 162, 94, 0.08);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  &__result {
+    margin-top: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  // ── the growth ledger (versions) ──
+  &__notice {
+    padding: 12px 16px;
+    border-radius: $radius-md;
+    background: rgba(127, 174, 138, 0.08);
+    border: 1px solid rgba(127, 174, 138, 0.35);
+    color: $color-observing;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  &__versions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__version {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 0 8px 0;
+
+    &--revert {
+      background: rgba(201, 122, 122, 0.05);
+    }
+
+    &-toggle {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: $color-text-dim;
+      cursor: pointer;
+      font-family: $font-stack;
+      font-size: 13px;
+      padding: 4px 0;
+
+      &:hover .skills__version-kind {
+        color: $color-accent;
+      }
+    }
+
+    &-kind {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: $color-text-faint;
+      flex: 0 0 auto;
+    }
+
+    &--revert .skills__version-kind {
+      color: #c97a7a;
+    }
+
+    &-reason {
+      flex: 1;
+      color: $color-text;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &-path {
+      font-size: 12px;
+      color: $color-text-faint;
+      flex: 0 0 auto;
+    }
+
+    &-date {
+      font-size: 11px;
+      color: $color-text-faint;
+      font-variant-numeric: tabular-nums;
+      flex: 0 0 auto;
+    }
+  }
+
+  &__revert {
+    margin-left: 24px;
+    background: none;
+    border: 1px solid rgba(201, 122, 122, 0.4);
+    color: #c97a7a;
+    border-radius: $radius-sm;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-top: 4px;
+
+    &:hover:not(:disabled) {
+      background: rgba(201, 122, 122, 0.1);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  &__diff {
+    margin: 10px 0 4px 24px;
+    padding: 12px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: $radius-sm;
+    border: 1px solid $color-border;
+    max-height: 260px;
+    overflow: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+
+    &-line {
+      display: block;
+      white-space: pre-wrap;
+
+      &--added {
+        color: $color-observing;
+      }
+
+      &--removed {
+        color: #c97a7a;
+        text-decoration: line-through;
+        text-decoration-color: rgba(201, 122, 122, 0.4);
+      }
+    }
+  }
+}
+
+@keyframes skills-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -8,9 +8,23 @@ interface Props {
   thought: string | null;
   onCall: () => void;
   onMessages: () => void;
+  mote?: React.ReactNode;
 }
 
-export default function HomeScreen({ state, presence, thought, onCall, onMessages }: Props) {
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 6) return "night owl";
+  if (hour < 12) return "good morning";
+  if (hour < 18) return "good afternoon";
+  return "good evening";
+}
+
+function dateLine(): string {
+  const d = new Date();
+  return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+}
+
+export default function HomeScreen({ state, presence, thought, onCall, onMessages, mote }: Props) {
   const orb = deriveOrb(state, presence);
   const orbStyle = {
     "--orb-core": orb.palette.core,
@@ -23,12 +37,30 @@ export default function HomeScreen({ state, presence, thought, onCall, onMessage
     "--orb-bloom": orb.bloom,
     "--orb-tremor": orb.tremor,
     "--orb-sway": orb.sway,
+    "--orb-ring": `${orb.ring}s`,
+    "--orb-pulse": `${orb.pulse}s`,
+    "--orb-ripple": orb.ripple,
   } as React.CSSProperties;
+
+  const moodLabel = state?.mood ? state.mood.toLowerCase() : "relaxed";
+  const greetingText = greeting();
+  const dateText = dateLine();
 
   return (
     <section className="home">
+      {mote}
+      <p className="home__date">
+        {greetingText} — {dateText}
+      </p>
+
+      <h1 className="home__name">Mira</h1>
+      <p className="home__tagline">She lives here, in your computer.</p>
+
       <div className="home__orb" style={orbStyle}>
+        <div className="home__orb-halo" aria-hidden />
         <div className="home__orb-core" aria-hidden />
+        <div className="home__orb-ripple" aria-hidden />
+        <div className="home__orb-ripple home__orb-ripple--second" aria-hidden />
         {orb.motes.map((m, i) => (
           <span
             key={i}
@@ -44,17 +76,15 @@ export default function HomeScreen({ state, presence, thought, onCall, onMessage
         ))}
       </div>
 
-      <h1 className="home__name">Mira</h1>
-
-      <div className={`home__presence home__presence--${presence.tone}`}>
-        <span className="home__presence-dot" />
-        <span>{presence.label}</span>
-      </div>
-
-      <div className={`home__viz home__viz--${presence.tone}`}>
-        {Array.from({ length: 5 }, (_, i) => (
-          <span key={i} className={`home__viz-seg ${i / 5 < presence.level ? "is-filled" : ""}`} />
-        ))}
+      <div className="home__moodline">
+        <div className={`home__emotion home__emotion--${moodLabel}`}>
+          <span className="home__emotion-dot" aria-hidden />
+          <span className="home__emotion-word">{moodLabel}</span>
+        </div>
+        <div className={`home__presence home__presence--${presence.tone}`}>
+          <span className="home__presence-dot" />
+          <span>{presence.label}</span>
+        </div>
       </div>
 
       {thought && (
@@ -66,10 +96,10 @@ export default function HomeScreen({ state, presence, thought, onCall, onMessage
 
       <div className="home__actions">
         <button className="home__action" type="button" onClick={onCall}>
-          Call
+          Call her
         </button>
         <button className="home__action home__action--primary" type="button" onClick={onMessages}>
-          Open Messages →
+          Talk — Open conversations →
         </button>
       </div>
     </section>

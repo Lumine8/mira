@@ -521,6 +521,12 @@
     }
   }
 
+  &__deny:disabled,
+  &__approve:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
   &__later {
     align-self: center;
     font-size: 12px;
@@ -531,6 +537,17 @@
     &:hover {
       color: $color-text;
     }
+  }
+
+  &__error {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #c97a7a;
+    background: rgba(201, 122, 122, 0.08);
+    border: 1px solid rgba(201, 122, 122, 0.35);
+    padding: 8px 12px;
+    border-radius: $radius-sm;
   }
 }
 
@@ -684,6 +701,12 @@
     &:hover {
       background: $color-accent-bright;
     }
+  }
+
+  &__deny:disabled,
+  &__approve:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   &__recent {

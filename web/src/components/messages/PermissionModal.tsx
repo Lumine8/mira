@@ -3,12 +3,14 @@ import type { PendingChange } from "../../lib/types";
 
 interface Props {
   change: PendingChange | null;
+  busy: boolean;
+  error: string | null;
   onApprove: (id: number) => void;
   onDeny: (id: number) => void;
   onClose: () => void;
 }
 
-export default function PermissionModal({ change, onApprove, onDeny, onClose }: Props) {
+export default function PermissionModal({ change, busy, error, onApprove, onDeny, onClose }: Props) {
   const url = change?.kind === "browse_url" ? String(change.payload.url ?? "") : "";
   const path = change?.kind === "write_file" ? String(change.payload.path ?? "") : "";
   const listen =
@@ -70,13 +72,24 @@ export default function PermissionModal({ change, onApprove, onDeny, onClose }: 
               </p>
             )}
             <div className="consent__actions">
-              <button className="consent__deny" type="button" onClick={() => onDeny(change.id)}>
+              <button
+                className="consent__deny"
+                type="button"
+                onClick={() => onDeny(change.id)}
+                disabled={busy}
+              >
                 Deny
               </button>
-              <button className="consent__approve" type="button" onClick={() => onApprove(change.id)}>
-                Allow
+              <button
+                className="consent__approve"
+                type="button"
+                onClick={() => onApprove(change.id)}
+                disabled={busy}
+              >
+                {busy ? "working…" : "Allow"}
               </button>
             </div>
+            {error && <p className="consent__error">{error}</p>}
             <button className="consent__later" type="button" onClick={onClose}>
               keep it pending
             </button>

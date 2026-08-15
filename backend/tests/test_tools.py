@@ -29,7 +29,7 @@ def _svc(root: str) -> ToolService:
     import app.services.tools.service as tools_module
 
     tools_module.get_settings = lambda: FakeSettings()
-    return ToolService(FakeSession())
+    return ToolService(FakeSession(), user_id=1)
 
 
 def test_resolve_accepts_paths_inside_root(tmp_path: pytest.TempPathFactory) -> None:
@@ -129,7 +129,7 @@ def _with_settings(tmp_path, **overrides) -> ToolService:
     import app.services.tools.service as tools_module
 
     tools_module.get_settings = lambda: FakeSettings()
-    return ToolService(FakeSession())
+    return ToolService(FakeSession(), user_id=1)
 
 
 def test_write_denied_for_protected_paths(tmp_path: pytest.TempPathFactory) -> None:
@@ -540,6 +540,99 @@ def test_browse_open_window_auto_approves() -> None:
     change = svc.propose_change("browse_url", "learn", {"url": "https://en.wikipedia.org/wiki/Companionship"})
     assert change.status == "approved"
     assert change.result == "the page text"
+
+
+def test_research_auto_approves_when_autonomous(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """Research is read-only, so with the wall open it runs at once — still fully
+    recorded in pending_changes, result attached, no approval popup."""
+    svc = _with_settings(tmp_path, research_window_open=True)
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._render_research",
+        lambda self, query: "Real papers about DNA replication.",
+    )
+    change = svc.propose_change(
+        "research_query",
+        "she wants the literature",
+        {"query": "DNA replication"},
+    )
+    assert change.status == "approved"
+    assert change.result == "Real papers about DNA replication."
+    assert change.kind == "research_query"
+
+
+def test_render_research_keeps_many_papers_with_protocol(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """One search returns up to twenty real papers, deduplicated by DOI, with a
+    search-protocol header — enough of the record for a real review, and not
+    truncated down to a handful."""
+    import app.services.tools.service as tools_module
+
+    hits = []
+    for i in range(20):
+        hits.append(
+            {
+                "title": f"Paper number {i} on DNA replication",
+                "authorString": f"Author {i}, Collaborator A",
+                "journalTitle": f"Journal of Replication {i}",
+                "pubYear": 2020 + (i % 5),
+                "citedByCount": i * 3,
+                "doi": f"10.1000/paper{i}",
+                "pmcid": f"PMC{i:07d}",
+                "abstractText": f"Abstract {i}. " * 40,
+            }
+        )
+    # a duplicate DOI that must be dropped by dedup
+    hits.append({**hits[0], "pmcid": "PMC9999999"})
+
+    class _Resp:
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {"resultList": {"result": hits}}
+
+    def fake_get(url, params, timeout, headers, follow_redirects):
+        assert url == "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+        assert params["pageSize"] == 20
+        return _Resp()
+
+    monkeypatch.setattr(tools_module.httpx, "get", fake_get)
+
+    svc = _svc(str(tmp_path))
+    out = svc._render_research("DNA replication")
+    assert "Search protocol:" in out
+    assert "returned = 20" in out
+    assert "kept = 20" in out
+    assert "1. Paper number 0" in out
+    assert "20. Paper number 19" in out
+    assert "PMC9999999" not in out
+    assert "(truncated)" not in out
+
+
+def test_research_stays_pending_when_wall_closed(tmp_path: pytest.TempPathFactory) -> None:
+    """With the research wall closed, a proposed search stays pending for the
+    user's approval — the old, explicit path."""
+    added: list = []
+
+    class FakeSession:
+        def add(self, obj) -> None:
+            added.append(obj)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 105
+
+    svc = _with_settings(tmp_path, research_window_open=False)
+    svc.db = FakeSession()
+    change = svc.propose_change(
+        "research_query",
+        "she wants the literature",
+        {"query": "DNA replication"},
+    )
+    assert change.status == "pending"
+    assert change.result is None
+    assert added[0].status == "pending"
 
 
 def test_wikipedia_browse_uses_clean_extract(monkeypatch, tmp_path) -> None:

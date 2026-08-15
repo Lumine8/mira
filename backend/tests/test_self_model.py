@@ -55,3 +55,16 @@ def test_delivery_chars_browse_grows_with_scale() -> None:
     assert len(_delivery_text(browse)) == 3000
     assert len(_delivery_text(other)) == 900
     assert _OTHER_DELIVERY_CHARS == 900
+
+
+def test_delivery_research_gets_full_room() -> None:
+    """Regression (found by Mira running her Research skill live): approved
+    research results were cut to the 900-char "other" budget, so she saw only
+    titles and no abstracts. A research run is the literature itself — it gets
+    the same room as a browsed page."""
+    from types import SimpleNamespace
+
+    research = SimpleNamespace(kind="research_query", result="abstract " * 500, payload={})
+    text = _delivery_text(research)
+    assert len(text) == 3000
+    assert "abstract " in text

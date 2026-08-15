@@ -1,14 +1,39 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from app.api.routes import browser, calls, health, history, mira, tools, ws, x
-from app.deps import require_access_token
+from app.api.routes import (
+    auth,
+    browser,
+    calls,
+    documents,
+    health,
+    history,
+    mira,
+    moderation,
+    mote,
+    porch,
+    skills,
+    tools,
+    waitlist,
+    ws,
+    x,
+)
 
 api_router = APIRouter()
-api_router.include_router(health.router)  # /health stays public (survivors)
-api_router.include_router(calls.router, dependencies=[Depends(require_access_token)])
-api_router.include_router(history.router, dependencies=[Depends(require_access_token)])
-api_router.include_router(mira.router, dependencies=[Depends(require_access_token)])
-api_router.include_router(tools.router, dependencies=[Depends(require_access_token)])
-api_router.include_router(browser.router, dependencies=[Depends(require_access_token)])
+# Per-user routers authenticate per-endpoint via get_current_user_id (session
+# bearer token, or the shared founder token). /health stays public. WebSockets
+# and the X OAuth callback authorize themselves.
+api_router.include_router(health.router)
+api_router.include_router(auth.router)
+api_router.include_router(calls.router)
+api_router.include_router(history.router)
+api_router.include_router(mira.router)
+api_router.include_router(moderation.router)
+api_router.include_router(mote.router)
+api_router.include_router(skills.router)
+api_router.include_router(documents.router)
+api_router.include_router(tools.router)
+api_router.include_router(browser.router)
 api_router.include_router(ws.router)  # websockets authorize their own token
 api_router.include_router(x.router)  # auth/callback is token-free (OAuth redirect)
+api_router.include_router(waitlist.router)
+api_router.include_router(porch.router)  # public: a device at the door

@@ -1,3 +1,4 @@
+from app.schemas.auth import AuthSuccess, MagicLinkRequest, MagicLinkVerify, UserOut
 from app.schemas.conversation import (
     CallStartRequest,
     CallStartResponse,
@@ -20,24 +21,63 @@ from app.schemas.mira import (
     RelationshipOut,
     WantOut,
 )
+from app.schemas.moderation import (
+    ModerationBanOut,
+    ModerationBanRequest,
+    ModerationFlagOut,
+    ModerationUserOut,
+)
+from app.schemas.mote import MotePresenceOut, MoteSharedTimeOut
+from app.schemas.porch import PorchStartOut
+from app.schemas.waitlist import (
+    WaitlistEntryOut,
+    WaitlistInvite,
+    WaitlistInviteOut,
+    WaitlistJoin,
+    WaitlistMeetingEnd,
+    WaitlistMeetingStart,
+    WaitlistMeetingStartOut,
+    WaitlistOut,
+    WaitlistSignup,
+)
 
 __all__ = [
+    "AuthSuccess",
     "CallStartRequest",
     "CallStartResponse",
     "ConversationDetailOut",
     "ConversationOut",
     "HealthResponse",
+    "MagicLinkRequest",
+    "MagicLinkVerify",
     "MemoryOut",
     "MessageOut",
     "MiraMemoryOut",
     "MiraOut",
     "MiraStateOut",
+    "ModerationBanOut",
+    "ModerationBanRequest",
+    "ModerationFlagOut",
+    "ModerationUserOut",
     "MoodRecordOut",
+    "MotePresenceOut",
+    "MoteSharedTimeOut",
     "PendingChangeOut",
     "PerceivedEventIn",
+    "PorchStartOut",
     "ProposeChangeIn",
     "QuestionOut",
     "RelationshipOut",
     "SpeakRequest",
+    "UserOut",
+    "WaitlistEntryOut",
+    "WaitlistInvite",
+    "WaitlistInviteOut",
+    "WaitlistJoin",
+    "WaitlistMeetingEnd",
+    "WaitlistMeetingStart",
+    "WaitlistMeetingStartOut",
+    "WaitlistOut",
+    "WaitlistSignup",
     "WantOut",
 ]

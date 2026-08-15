@@ -188,7 +188,7 @@ async def test_current_turn_reaches_provider_exactly_once(monkeypatch) -> None:
     once appended by build_messages), which is why Mira kept saying the words
     'came again' — they did. History must exclude the current turn."""
     monkeypatch.setattr(manager_module, "get_settings", lambda: _Settings())
-    conv = Conversation(kind="text")
+    conv = Conversation(kind="text", user_id=1)
     conv.id = 42
     session = RecordingSession(conv)
     prior = [
@@ -201,7 +201,7 @@ async def test_current_turn_reaches_provider_exactly_once(monkeypatch) -> None:
     session._next_id = 3
 
     provider = FakeProvider(["A quiet reply."])
-    mgr = ConversationManager(session, provider)
+    mgr = ConversationManager(session, provider, user_id=1)
 
     async for _ in mgr.generate_reply(42, "the apple cart tipped", source="text"):
         pass
@@ -212,3 +212,178 @@ async def test_current_turn_reaches_provider_exactly_once(monkeypatch) -> None:
     assert contents.count("good morning") == 1
     assert contents[-1] == "the apple cart tipped"
     assert contents[-2] == "morning"
+
+
+class _ResearchSettings:
+    self_model_enabled = False
+    console_emotions_enabled = False
+    mira_archive_path = ""
+    self_edit_roots = "."
+    mira_self_write_roots = "."
+    mira_self_write_deny = ""
+    mira_self_write_autonomous = False
+    browse_window_open = False
+    host_window_open = False
+    research_window_open = True
+    mira_browse_allowed_domains = ""
+    mira_money_deny_domains = ""
+    mira_money_deny_commands = ""
+
+
+@pytest.mark.asyncio
+async def test_research_runs_and_continues_in_same_reply(monkeypatch) -> None:
+    """Research runs on its own (no approval) and its results are folded into
+    the SAME reply via a continuation pass — she delivers the document without
+    the voice having to nudge again. Activity lines are streamed along the way."""
+    import app.services.tools.service as tools_module
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._render_research",
+        lambda self, query: "First paper about DNA replication.",
+    )
+
+    conv = Conversation(kind="text", user_id=1)
+    conv.id = 42
+    session = RecordingSession(conv)
+
+    provider = FakeProvider(
+        [
+            "Let me search the record. [[research|DNA replication|latest papers]]",
+            "Here is the document on DNA replication based on the papers.",
+        ]
+    )
+    mgr = ConversationManager(session, provider, user_id=1)
+    activities: list[str] = []
+
+    async def on_activity(label: str) -> None:
+        activities.append(label)
+
+    streamed: list[str] = []
+    async for token in mgr.generate_reply(
+        42,
+        "research DNA replication and write a document",
+        source="text",
+        on_activity=on_activity,
+    ):
+        streamed.append(token)
+
+    joined = "".join(streamed)
+    assert "[[research" not in joined
+    assert "Let me search the record." in joined
+    assert "Here is the document on DNA replication" in joined
+    assert activities == [
+        "searching the scientific literature for DNA replication",
+        "thinking",
+    ]
+
+    assert len(provider._calls) == 2
+    cont_messages = provider._calls[1]
+    cont_text = "\n".join(m.get("content", "") for m in cont_messages)
+    assert "First paper about DNA replication." in cont_text
+    assert "search of the scientific record: DNA replication" in cont_text
+    # The continuation instructs a proper review: hypotheses and breadth.
+    assert "null hypothesis (H0)" in cont_text
+    assert "alternative hypothesis (H1)" in cont_text
+    assert "at least fifteen" in cont_text
+
+    assert "Let me search the record." in mgr.last_reply
+    assert "Here is the document on DNA replication based on the papers." in mgr.last_reply
+
+    proposals = mgr.proposals()
+    assert len(proposals) == 1
+    assert proposals[0].kind == "research_query"
+    assert proposals[0].status == "approved"
+    assert proposals[0].delivered is True
+
+
+@pytest.mark.asyncio
+async def test_research_ends_with_document_on_her_shelf(monkeypatch) -> None:
+    """A finished research run hands over its review as a mira document and
+    broadcasts document_created so the voice can open the paper beside the
+    conversation."""
+    import app.services.tools.service as tools_module
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._render_research",
+        lambda self, query: "First paper about DNA replication.",
+    )
+
+    saved: list[tuple[str, str]] = []
+    sent: list[tuple[dict, int]] = []
+
+    class _FakeDocs:
+        def __init__(self, db, *, user_id) -> None:
+            pass
+
+        def create_mira(self, title, content):
+            saved.append((title, content))
+            return {"name": "research-dna-replication", "author": "mira"}
+
+    monkeypatch.setattr(manager_module, "DocumentService", _FakeDocs)
+    monkeypatch.setattr(
+        manager_module,
+        "broadcast_later",
+        lambda obj, user_id: sent.append((obj, user_id)),
+    )
+
+    conv = Conversation(kind="text", user_id=1)
+    conv.id = 42
+    session = RecordingSession(conv)
+    provider = FakeProvider(
+        [
+            "Let me search the record. [[research|DNA replication|latest papers]]",
+            "Here is the document on DNA replication based on the papers.",
+        ]
+    )
+    mgr = ConversationManager(session, provider, user_id=1)
+
+    async for _ in mgr.generate_reply(42, "research DNA replication", source="text"):
+        pass
+
+    assert len(saved) == 1
+    title, content = saved[0]
+    assert title == "Research: DNA replication"
+    assert content.startswith("# Research: DNA replication")
+    assert mgr.last_reply in content
+
+    assert len(sent) == 1
+    obj, user_id = sent[0]
+    assert user_id == 1
+    assert obj["type"] == "document_created"
+    assert obj["name"] == "research-dna-replication"
+    assert obj["author"] == "mira"
+    assert obj["conversation_id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_research_wall_closed_stays_pending_no_continuation(monkeypatch) -> None:
+    """With the research wall closed, a search stays pending and no second pass
+    runs — the old approved-gate behavior is intact as a fallback."""
+    import app.services.tools.service as tools_module
+
+    class Closed(_ResearchSettings):
+        research_window_open = False
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: Closed())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: Closed())
+
+    conv = Conversation(kind="text", user_id=1)
+    conv.id = 42
+    session = RecordingSession(conv)
+
+    provider = FakeProvider(["[[research|DNA replication|latest papers]]"])
+    mgr = ConversationManager(session, provider, user_id=1)
+
+    streamed: list[str] = []
+    async for token in mgr.generate_reply(42, "research DNA replication", source="text"):
+        streamed.append(token)
+
+    assert len(provider._calls) == 1
+    assert mgr.last_reply == "I asked to search the scientific literature. It is yours to decide."
+    proposals = mgr.proposals()
+    assert len(proposals) == 1
+    assert proposals[0].status == "pending"

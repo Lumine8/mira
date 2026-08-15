@@ -63,16 +63,17 @@ def revisit(importance: int) -> int:
 
 
 class QuestionService:
-    """Thin DB layer over the question dynamics above."""
+    """Thin DB layer over the question dynamics above. Scoped to one user."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, *, user_id: int) -> None:
         self.db = db
+        self.user_id = user_id
 
     def list_open(self, limit: int = 50) -> list[Question]:
         return list(
             self.db.execute(
                 select(Question)
-                .where(Question.status == "open")
+                .where(Question.user_id == self.user_id, Question.status == "open")
                 .order_by(Question.importance.desc(), Question.id.asc())
                 .limit(limit)
             ).scalars()
@@ -81,9 +82,22 @@ class QuestionService:
     def list_recent(self, limit: int = 40) -> list[Question]:
         return list(
             self.db.execute(
-                select(Question).order_by(Question.updated_at.desc()).limit(limit)
+                select(Question)
+                .where(Question.user_id == self.user_id)
+                .order_by(Question.updated_at.desc())
+                .limit(limit)
             ).scalars()
         )
+
+    def is_echo(self, question: str) -> bool:
+        """True when ``question`` is the reflection re-listing a question she
+        is already carrying (an echo of the prompt's own open list). Echoes are
+        not new wonder — they are the loop feeding on itself — so the caller
+        can drop them before they touch the DB at all."""
+        text = question.strip()
+        if not text:
+            return False
+        return any(questions_match(q.question, text) for q in self.list_open(limit=100))
 
     def describe_open(self, limit: int = 4) -> str:
         """One line for the reflection/consolidation inputs: the questions she is
@@ -122,7 +136,10 @@ class QuestionService:
                 return q
 
         existing = self.db.execute(
-            select(Question).order_by(Question.updated_at.desc()).limit(200)
+            select(Question)
+            .where(Question.user_id == self.user_id)
+            .order_by(Question.updated_at.desc())
+            .limit(200)
         ).scalars()
         for q in existing:
             if q.status in {"asked", "answered", "dropped"} and questions_match(q.question, text):
@@ -145,6 +162,7 @@ class QuestionService:
             status="open",
             related_conversation_id=conversation_id,
             last_revisited=now,
+            user_id=self.user_id,
         )
         self.db.add(q)
         self.db.commit()
@@ -170,7 +188,9 @@ class QuestionService:
 
     def mark_asked(self, question_id: int) -> Question | None:
         """She asked it out loud: the question leaves the carried set."""
-        q = self.db.get(Question, question_id)
+        q = self.db.execute(
+            select(Question).where(Question.id == question_id, Question.user_id == self.user_id)
+        ).scalar_one_or_none()
         if q is None:
             return None
         q.status = "asked"
@@ -182,7 +202,9 @@ class QuestionService:
 
     def mark_answered(self, question_id: int) -> Question | None:
         """She got an answer (or found it herself): the question is resolved."""
-        q = self.db.get(Question, question_id)
+        q = self.db.execute(
+            select(Question).where(Question.id == question_id, Question.user_id == self.user_id)
+        ).scalar_one_or_none()
         if q is None:
             return None
         q.status = "answered"
@@ -193,7 +215,9 @@ class QuestionService:
 
     def mark_dropped(self, question_id: int) -> Question | None:
         """She let the question go: it stops resurfacing."""
-        q = self.db.get(Question, question_id)
+        q = self.db.execute(
+            select(Question).where(Question.id == question_id, Question.user_id == self.user_id)
+        ).scalar_one_or_none()
         if q is None:
             return None
         q.status = "dropped"

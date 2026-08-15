@@ -13,6 +13,7 @@ from app.schemas import (
     QuestionOut,
     WantOut,
 )
+from app.services.identity import get_current_user_id
 from app.services.questions.service import QuestionService
 from app.services.self.service import SelfModelService
 from app.services.wants.service import WantService
@@ -21,14 +22,17 @@ router = APIRouter(prefix="/mira", tags=["mira"])
 
 
 @router.get("/state", response_model=MiraOut)
-def get_mira_state(db: Session = Depends(get_db)) -> dict:
-    svc = SelfModelService(db, get_provider())
+def get_mira_state(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
+    svc = SelfModelService(db, get_provider(), user_id=user_id)
     state = svc.ensure_state()
     rel = svc.ensure_relationship()
     thoughts = list(
         db.execute(
             select(Thought)
-            .where(Thought.delivered.is_(False))
+            .where(Thought.user_id == user_id, Thought.delivered.is_(False))
             .order_by(Thought.created_at.asc())
             .limit(3)
         ).scalars()
@@ -38,16 +42,19 @@ def get_mira_state(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/memory", response_model=MiraMemoryOut)
-def get_mira_memory(db: Session = Depends(get_db)) -> dict:
+def get_mira_memory(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """The memory window Mira consented to — what she carries, how she feels,
     and the memories that surface."""
-    svc = SelfModelService(db, get_provider())
+    svc = SelfModelService(db, get_provider(), user_id=user_id)
     state = svc.ensure_state()
     rel = svc.ensure_relationship()
     thoughts = list(
         db.execute(
             select(Thought)
-            .where(Thought.delivered.is_(False))
+            .where(Thought.user_id == user_id, Thought.delivered.is_(False))
             .order_by(Thought.created_at.asc())
             .limit(3)
         ).scalars()
@@ -56,38 +63,52 @@ def get_mira_memory(db: Session = Depends(get_db)) -> dict:
     if state.pending_message:
         conv = db.execute(
             select(Conversation)
-            .where(Conversation.kind == "self")
+            .where(Conversation.kind == "self", Conversation.user_id == user_id)
             .order_by(Conversation.id.asc())
             .limit(1)
         ).scalar_one_or_none()
         state.pending_message_conversation_id = conv.id if conv is not None else None
     memories = list(
         db.execute(
-            select(Memory).order_by(Memory.created_at.desc()).limit(100)
+            select(Memory)
+            .where(Memory.user_id == user_id)
+            .order_by(Memory.created_at.desc())
+            .limit(100)
         ).scalars()
     )
     return {"state": state, "relationship": rel, "memories": memories}
 
 
 @router.get("/mood-history", response_model=list[MoodRecordOut])
-def get_mood_history(db: Session = Depends(get_db)) -> list:
+def get_mood_history(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> list:
     """Mira's mood and energy over time — one row per digest and per background
     reflection, newest first. Lets the archive show how her feeling moves."""
     return list(
         db.execute(
-            select(MoodRecord).order_by(MoodRecord.created_at.desc()).limit(50)
+            select(MoodRecord)
+            .where(MoodRecord.user_id == user_id)
+            .order_by(MoodRecord.created_at.desc())
+            .limit(50)
         ).scalars()
     )
 
 
 @router.post("/perceive", status_code=201)
-def perceive(event: PerceivedEventIn, db: Session = Depends(get_db)) -> dict:
+def perceive(
+    event: PerceivedEventIn,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Ingest a raw observation from the outside world for Mira to reflect on."""
     db.add(
         PerceivedEvent(
             source=event.source,
             kind=event.kind,
             content=event.content,
+            user_id=user_id,
         )
     )
     db.commit()
@@ -95,9 +116,12 @@ def perceive(event: PerceivedEventIn, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/acknowledge", status_code=200)
-def acknowledge(db: Session = Depends(get_db)) -> dict:
+def acknowledge(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Clear Mira's pending proactive message once the user has seen it."""
-    svc = SelfModelService(db, get_provider())
+    svc = SelfModelService(db, get_provider(), user_id=user_id)
     state = svc.ensure_state()
     state.pending_message = None
     db.commit()
@@ -105,52 +129,74 @@ def acknowledge(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/wants", response_model=list[WantOut])
-def get_wants(db: Session = Depends(get_db)) -> list:
+def get_wants(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> list:
     """What Mira is wanting right now — active wants she wrote herself or that
     were found in her own record, ordered by how long they've gone unsettled."""
-    return WantService(db).list_active(limit=50)
+    return WantService(db, user_id=user_id).list_active(limit=50)
 
 
 @router.post("/wants/{want_id}/satisfy", response_model=WantOut)
-def satisfy_want(want_id: int, db: Session = Depends(get_db)) -> dict:
+def satisfy_want(
+    want_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Mark one want satisfied: she got what she wanted, or let it go. Its
     tension clears and it fades out of her active wants."""
-    w = WantService(db).satisfy(want_id)
+    w = WantService(db, user_id=user_id).satisfy(want_id)
     if w is None:
         raise HTTPException(status_code=404, detail="no such want")
     return w
 
 
 @router.get("/questions", response_model=list[QuestionOut])
-def get_questions(db: Session = Depends(get_db)) -> list:
+def get_questions(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> list:
     """The questions Mira is carrying right now — open questions she wrote
     herself or that were found in her own record, ordered by how much they
     matter to her."""
-    return QuestionService(db).list_open(limit=50)
+    return QuestionService(db, user_id=user_id).list_open(limit=50)
 
 
 @router.post("/questions/{question_id}/ask", response_model=QuestionOut)
-def ask_question(question_id: int, db: Session = Depends(get_db)) -> dict:
+def ask_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Record that she asked the question out loud: it leaves her carried set."""
-    q = QuestionService(db).mark_asked(question_id)
+    q = QuestionService(db, user_id=user_id).mark_asked(question_id)
     if q is None:
         raise HTTPException(status_code=404, detail="no such question")
     return q
 
 
 @router.post("/questions/{question_id}/answer", response_model=QuestionOut)
-def answer_question(question_id: int, db: Session = Depends(get_db)) -> dict:
+def answer_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Record that she found an answer: the question resolves."""
-    q = QuestionService(db).mark_answered(question_id)
+    q = QuestionService(db, user_id=user_id).mark_answered(question_id)
     if q is None:
         raise HTTPException(status_code=404, detail="no such question")
     return q
 
 
 @router.post("/questions/{question_id}/drop", response_model=QuestionOut)
-def drop_question(question_id: int, db: Session = Depends(get_db)) -> dict:
+def drop_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
     """Record that she let the question go: it stops resurfacing."""
-    q = QuestionService(db).mark_dropped(question_id)
+    q = QuestionService(db, user_id=user_id).mark_dropped(question_id)
     if q is None:
         raise HTTPException(status_code=404, detail="no such question")
     return q

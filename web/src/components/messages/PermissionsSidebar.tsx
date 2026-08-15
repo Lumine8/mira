@@ -4,6 +4,7 @@ interface Props {
   open: boolean;
   pending: PendingChange[];
   history: PendingChange[];
+  busyId: number | null;
   onApprove: (id: number) => void;
   onDeny: (id: number) => void;
   onClose: () => void;
@@ -32,7 +33,7 @@ function summaryFor(change: PendingChange): string {
   return change.summary;
 }
 
-export default function PermissionsSidebar({ open, pending, history, onApprove, onDeny, onClose }: Props) {
+export default function PermissionsSidebar({ open, pending, history, busyId, onApprove, onDeny, onClose }: Props) {
   return (
     <aside className={`perms ${open ? "perms--open" : ""}`} aria-hidden={!open}>
       <header className="perms__head">
@@ -60,6 +61,7 @@ export default function PermissionsSidebar({ open, pending, history, onApprove, 
                 className="perms__deny"
                 type="button"
                 onClick={() => onDeny(c.id)}
+                disabled={busyId != null}
               >
                 Deny
               </button>
@@ -67,6 +69,7 @@ export default function PermissionsSidebar({ open, pending, history, onApprove, 
                 className="perms__approve"
                 type="button"
                 onClick={() => onApprove(c.id)}
+                disabled={busyId != null}
               >
                 Allow
               </button>

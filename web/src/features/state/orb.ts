@@ -31,6 +31,15 @@ export interface OrbProfile {
   /** 0..1 — how much she sways from side to side. Curiosity wanders; fatigue
    *  holds still. */
   sway: number;
+  /** Seconds for one revolution of the outer halo ring. Play and curiosity
+   *  turn it faster; a quiet mind lets it coast. */
+  ring: number;
+  /** Seconds between heartbeats of the light. Energy and warmth quicken it;
+   *  worry and tiredness slow it to almost nothing. */
+  pulse: number;
+  /** 0..1 — how much the light flares outward in an expanding ripple when she
+   *  blooms (a laugh, a warmth). Worry holds still and gathers inward. */
+  ripple: number;
   /** Small motes, one per carried thought — her thoughts made visible. */
   motes: { top: string; left: string; size: number; delay: number }[];
 }
@@ -129,5 +138,42 @@ export function deriveOrb(state: MiraState | null, presence: Presence): OrbProfi
   const thoughts = state?.carried_thoughts ?? [];
   const motes = thoughts.slice(0, 6).map((t, i) => moteFor(t, i));
 
-  return { palette, intensity, breath, motion, contract, bloom, tremor, sway, motes };
+  // The outer ring coasts in praise of what passes: whimsical moods wind it
+  // faster, a drawn mind barely turns it at all.
+  const ringTempo: Record<string, number> = {
+    playful: 9,
+    curious: 13,
+    warm: 15,
+    distracted: 14,
+    relaxed: 20,
+    thoughtful: 22,
+    confused: 21,
+    concerned: 26,
+    worried: 30,
+    tired: 38,
+  };
+  const ring = ringTempo[mood] ?? 20;
+  const ringScale = 1 + (energy - 50) / 150;
+
+  // The heartbeat of the light: warmth and aliveness beat faster; worry and
+  // fatigue slow the pulse until it is barely there.
+  const pulse = 7.5 - (energy / 100) * 3.6 - temper.tremor * 1.4 - life * 2.5;
+
+  // A bloom (a laugh, a warmth) breathes a ripple outward; worry goes still.
+  const ripple = Math.max(0, Math.min(1, bloom - contract * 0.4 - fatigue * 0.5));
+
+  return {
+    palette,
+    intensity,
+    breath,
+    motion,
+    contract,
+    bloom,
+    tremor,
+    sway,
+    ring: Math.max(6, ring * ringScale),
+    pulse: Math.max(2.2, pulse),
+    ripple,
+    motes,
+  };
 }

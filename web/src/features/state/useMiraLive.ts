@@ -31,6 +31,13 @@ function notify(body: string) {
 export function useMiraLive(pendingMessage: string | null, pendingConversationId: number | null) {
   const [live, setLive] = useState<LiveSelfMessage | null>(null);
   const [browse, setBrowse] = useState<BrowseActivity | null>(null);
+  const [replyEvent, setReplyEvent] = useState<{ conversationId: number; nonce: number } | null>(null);
+  const [documentEvent, setDocumentEvent] = useState<{
+    name: string;
+    author: "founder" | "mira";
+    conversationId: number;
+    nonce: number;
+  } | null>(null);
   const dismissedContent = useRef<string | null>(null);
 
   useEffect(() => {
@@ -41,6 +48,15 @@ export function useMiraLive(pendingMessage: string | null, pendingConversationId
           notify(event.content);
         } else if (event.type === "browse_activity") {
           setBrowse({ url: event.url, status: event.status, changeId: event.change_id });
+        } else if (event.type === "conversation_reply") {
+          setReplyEvent({ conversationId: event.conversation_id, nonce: Date.now() });
+        } else if (event.type === "document_created") {
+          setDocumentEvent({
+            name: event.name,
+            author: event.author,
+            conversationId: event.conversation_id,
+            nonce: Date.now(),
+          });
         }
       },
     });
@@ -71,5 +87,5 @@ export function useMiraLive(pendingMessage: string | null, pendingConversationId
     setBrowse(null);
   }, []);
 
-  return { message, dismiss, browse, dismissBrowse };
+  return { message, dismiss, browse, dismissBrowse, replyEvent, documentEvent };
 }

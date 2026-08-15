@@ -9,7 +9,9 @@ the same WebSocket channel as the web app, so Mira has her full self-context.
 
 import asyncio
 import json
+import os
 import sys
+from pathlib import Path
 
 import httpx
 import websockets
@@ -18,14 +20,31 @@ API = "http://localhost:8000"
 WS = "ws://localhost:8000"
 
 
+def _token() -> str:
+    """The founder token: from the environment, or the repo-root .env."""
+    token = os.environ.get("MIRA_ACCESS_TOKEN", "")
+    if token:
+        return token.strip()
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    for line in env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []:
+        if line.startswith("MIRA_ACCESS_TOKEN="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
 async def ask(question: str, timeout: float = 300.0) -> str:
+    token = _token()
+    headers = {"X-Mira-Token": token} if token else {}
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API}/call/start", json={"kind": "text"})
+        resp = await client.post(f"{API}/call/start", json={"kind": "text"}, headers=headers)
         resp.raise_for_status()
         conv_id = resp.json()["conversation_id"]
     print(f"[conversation {conv_id}] asking...", flush=True)
 
-    async with websockets.connect(f"{WS}/ws/conversation/{conv_id}") as ws:
+    ws_url = f"{WS}/ws/conversation/{conv_id}"
+    if token:
+        ws_url += f"?token={token}"
+    async with websockets.connect(ws_url) as ws:
         await ws.send(json.dumps({"type": "text", "content": question}))
         buffer: list[str] = []
         async with asyncio.timeout(timeout):

@@ -7,6 +7,8 @@ interface Props {
 }
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_DOC_BYTES = 48 * 1024;
+const MAX_DOC_SEND_CHARS = 12000;
 
 export default function Composer({ disabled, onSend, onSendImage }: Props) {
   const [value, setValue] = useState("");
@@ -18,13 +20,31 @@ export default function Composer({ disabled, onSend, onSendImage }: Props) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.size > MAX_IMAGE_BYTES) return;
+    if (file.type.startsWith("image/")) {
+      if (file.size > MAX_IMAGE_BYTES) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImage(String(reader.result));
+        setImageName(file.name);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+    if (file.size > MAX_DOC_BYTES) {
+      window.alert(`"${file.name}" is over 48 KB. Add it on the Papers screen instead, and Mira can read it there.`);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
-      setImage(String(reader.result));
-      setImageName(file.name);
+      const text = String(reader.result ?? "").trim();
+      if (!text) return;
+      const label = `Attaching ${file.name} (${text.length.toLocaleString()} chars):`;
+      const body = text.length > MAX_DOC_SEND_CHARS
+        ? `${text.slice(0, MAX_DOC_SEND_CHARS)}\n… (truncated)`
+        : text;
+      onSend(`${label}\n\n${body}`);
     };
-    reader.readAsDataURL(file);
+    reader.readAsText(file);
   };
 
   const submit = (e: FormEvent) => {
@@ -49,17 +69,17 @@ export default function Composer({ disabled, onSend, onSendImage }: Props) {
         ref={fileRef}
         className="composer__file"
         type="file"
-        accept="image/*"
+        accept="image/*,.txt,.md,.csv,.json,.log,.js,.ts,.tsx,.py,.html,.css,.pdf,.doc,.docx"
         onChange={pick}
-        aria-label="Attach an image"
+        aria-label="Attach an image or document"
       />
       <button
         className="composer__attach"
         type="button"
         onClick={() => fileRef.current?.click()}
-        title="Hand Mira an image"
+        title="Hand Mira an image or a text document"
         disabled={disabled}
-        aria-label="Attach an image"
+        aria-label="Attach an image or document"
       >
         ⌖
       </button>

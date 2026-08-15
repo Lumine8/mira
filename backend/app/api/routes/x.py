@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.deps import require_access_token
+from app.services.identity import get_current_user_id
 from app.services.x import TwitterService, XError
 
 router = APIRouter(prefix="/mira/x", tags=["mira"])
@@ -13,13 +14,14 @@ router = APIRouter(prefix="/mira/x", tags=["mira"])
 def auth_start(
     request: Request,
     db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
     _: None = Depends(require_access_token),
 ) -> RedirectResponse:
     """Redirect the voice's browser to X for OAuth. Requires X_CLIENT_ID and a
     registered X_REDIRECT_URI. The token (X-Mira-Token header or ?token=) must
     be present because this acts on Mira's behalf."""
     try:
-        url = TwitterService(db).authorize_url()
+        url = TwitterService(db, user_id=user_id).authorize_url()
     except XError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(url=url)
@@ -30,7 +32,7 @@ def auth_callback(code: str, state: str, db: Session = Depends(get_db)) -> HTMLR
     """X redirects here after the voice agrees. Exchanges the code and stores
     the tokens so Mira can act on the account."""
     try:
-        result = TwitterService(db).exchange_code(code, state)
+        result = TwitterService(db, user_id=get_current_user_id(db)).exchange_code(code, state)
     except XError as exc:
         return _page(f"Mira couldn't connect to X", f"{exc}", failed=True)
     name = result.get("username") or "your account"
@@ -44,9 +46,10 @@ def auth_callback(code: str, state: str, db: Session = Depends(get_db)) -> HTMLR
 @router.get("/status")
 def x_status(
     db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
     _: None = Depends(require_access_token),
 ) -> dict:
-    return TwitterService(db).status()
+    return TwitterService(db, user_id=user_id).status()
 
 
 def _page(title: str, body: str, *, failed: bool = False) -> HTMLResponse:

@@ -17,11 +17,12 @@ import re
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from io import BytesIO
 from urllib.parse import quote, urlparse
+from xml.etree import ElementTree as ET
 
 import httpx
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,6 +30,10 @@ from app.core.config import get_settings
 from app.models import Message, PendingChange
 from app.services.broadcast import broadcast_later
 from app.services.export import schedule_archive_write
+from app.services.identity import founder_user_id
+from app.services.skills import SkillError
+from app.services.skills.registry import SkillRegistry
+from app.services.skills.runner import SkillRunner
 
 logger = logging.getLogger("mira.tools")
 
@@ -55,6 +60,29 @@ _MAX_HOST_RESULT = 8000
 # Host reads: read-only, needs no approval. The host agent reads the file and
 # reports its content back into Mira's context.
 _MAX_HOST_READ_PATH = 500
+# Scientific literature search (Europe PMC, no key): a real search of the
+# published record, read-only like reading — no approval, fully recorded.
+_MAX_RESEARCH_QUERY = 300
+# One search, twenty papers: a single literature query must return enough of the
+# record for a real review — at least fifteen usable hits after screening.
+_RESEARCH_PAGE_SIZE = 20
+_MAX_RESEARCH_ABSTRACT = 480
+_MAX_RESEARCH_RESULTS = 20_000
+# Mira's skill shelf: pages she wrote herself in data/self/skills. Loading one
+# is read-only — it is her own mind, so it needs no approval.
+_MAX_SKILL_BYTES = 24_000
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
+
+# Mira's image studio: SVGs she authors in [[image|name|reason|svg]]. On
+# approval they are validated, rendered to PNG, and delivered as a picture the
+# voice sees while she gets a reading of it. The SVG is her handwriting; the
+# PNG is the translation of it into something visible.
+_MAX_IMAGE_SVG = 12_000
+# A name she gives a picture may read like a title ("the patchy self"); only
+# letters, numbers, spaces, dash, underscore — spaces become underscores in the
+# saved filename.
+_IMAGE_NAME_RE = re.compile(r"^[a-z0-9 _'.-]{1,64}$")
+_IMAGE_MAX_DIM = 1600
 
 
 class ToolError(Exception):
@@ -62,8 +90,9 @@ class ToolError(Exception):
 
 
 class ToolService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, *, user_id: int) -> None:
         self.db = db
+        self.user_id = user_id
         self.roots = [os.path.realpath(r) for r in get_settings().self_edit_roots.split(",") if r.strip()]
 
     # -- path safety -------------------------------------------------------
@@ -99,6 +128,15 @@ class ToolService:
         if any(resolved == root or resolved.startswith(root + os.sep) for root in denied):
             raise ToolError(f"that file is protected: {path!r}")
         return resolved
+
+    def _in_skill_root(self, path: str) -> bool:
+        """Whether a resolved write path lives under the skill registry root —
+        the one place she may change on her own, still fully recorded."""
+        resolved = self._resolve_write(path)
+        root = os.path.realpath(
+            os.path.join(self.roots[0], getattr(get_settings(), "mira_skill_write_roots", "data/skills"))
+        )
+        return resolved == root or resolved.startswith(root + os.sep)
 
     # -- read-only tools ---------------------------------------------------
 
@@ -204,7 +242,38 @@ class ToolService:
                 raise ToolError("x_post needs the words she wants to post")
             if len(text) > 280:
                 raise ToolError(f"x_post text too long ({len(text)} > 280)")
-        change = PendingChange(kind=kind, summary=summary[:2000], payload=payload, status="pending")
+        if kind == "skill_load":
+            name = payload.get("name", "").strip().lower()
+            if not _SKILL_NAME_RE.match(name):
+                raise ToolError(
+                    "skill names are 1-64 lowercase letters, numbers, dash, or underscore"
+                )
+            self.load_skill(name)  # validate now; the content is delivered below
+        if kind == "research_query":
+            query = payload.get("query", "").strip()
+            if not query:
+                raise ToolError("research_query needs a query (what she wants to find)")
+            if len(query) > _MAX_RESEARCH_QUERY:
+                raise ToolError(f"research_query too long ({len(query)} > {_MAX_RESEARCH_QUERY})")
+        if kind == "build_image":
+            name = payload.get("name", "").strip().lower()
+            if not _IMAGE_NAME_RE.match(name):
+                raise ToolError(
+                    "image names are 1-64 lowercase letters, numbers, spaces, dash, or underscore"
+                )
+            svg = payload.get("svg", "")
+            if not svg.strip():
+                raise ToolError("build_image needs the SVG she wrote")
+            if len(svg) > _MAX_IMAGE_SVG:
+                raise ToolError(f"build_image SVG too long ({len(svg)} > {_MAX_IMAGE_SVG})")
+            self._validate_svg(svg)  # reject dangerous/malformed markup now
+        change = PendingChange(
+            kind=kind,
+            summary=summary[:2000],
+            payload=payload,
+            status="pending",
+            user_id=self.user_id,
+        )
         self.db.add(change)
         self.db.commit()
         self.db.refresh(change)
@@ -218,7 +287,8 @@ class ToolService:
                     "url": payload.get("url", ""),
                     "status": "pending",
                     "change_id": change.id,
-                }
+                },
+                user_id=self.user_id,
             )
 
         if kind == "browse_url" and get_settings().browse_window_open:
@@ -226,15 +296,20 @@ class ToolService:
             # The fetch and approval are still fully recorded in pending_changes.
             change.result = self._fetch_browse(payload.get("url", ""))
             change.status = "approved"
-            change.resolved_at = datetime.now(timezone.utc)
+            change.resolved_at = datetime.now(UTC)
             self.db.commit()
             self.db.refresh(change)
 
-        if kind == "write_file" and get_settings().mira_self_write_autonomous:
-            # She makes her own changes; they are still fully recorded.
-            self._apply_write(payload)
+        if kind == "write_file" and (
+            get_settings().mira_self_write_autonomous
+            or self._in_skill_root(payload.get("path", ""))
+        ):
+            # She makes her own changes — either worldwide (autonomous flag) or
+            # inside the skill registry, which is where capabilities grow. Both
+            # are still fully recorded in pending_changes.
+            self._apply_write(payload, change=change)
             change.status = "approved"
-            change.resolved_at = datetime.now(timezone.utc)
+            change.resolved_at = datetime.now(UTC)
             self.db.commit()
             self.db.refresh(change)
 
@@ -242,7 +317,16 @@ class ToolService:
             # Reading is read-only: it changes nothing, so it needs no approval.
             # The host agent performs the read and reports the content back.
             change.status = "approved"
-            change.resolved_at = datetime.now(timezone.utc)
+            change.resolved_at = datetime.now(UTC)
+            self.db.commit()
+            self.db.refresh(change)
+
+        if kind == "skill_load":
+            # Pulling down one of her own books is read-only and needs no
+            # approval; the content is delivered into her next context.
+            change.result = self.load_skill(payload.get("name", ""))
+            change.status = "approved"
+            change.resolved_at = datetime.now(UTC)
             self.db.commit()
             self.db.refresh(change)
 
@@ -250,7 +334,18 @@ class ToolService:
             # An open host window: she may use the voice's laptop on her own,
             # still fully recorded. The host agent runs it and reports back.
             change.status = "approved"
-            change.resolved_at = datetime.now(timezone.utc)
+            change.resolved_at = datetime.now(UTC)
+            self.db.commit()
+            self.db.refresh(change)
+
+        if kind == "research_query" and get_settings().research_window_open:
+            # Searching the public scientific record is read-only — it changes
+            # nothing, so it needs no approval. The run is still fully recorded
+            # in pending_changes, and the result is delivered into her next
+            # context (and, when she is mid-turn, into the same reply).
+            change.result = self._render_research(payload.get("query", ""))
+            change.status = "approved"
+            change.resolved_at = datetime.now(UTC)
             self.db.commit()
             self.db.refresh(change)
         return change
@@ -271,7 +366,7 @@ class ToolService:
         return list(
             self.db.execute(
                 select(PendingChange)
-                .where(PendingChange.status == "pending")
+                .where(PendingChange.user_id == self.user_id, PendingChange.status == "pending")
                 .order_by(PendingChange.created_at.asc())
             ).scalars()
         )
@@ -282,6 +377,7 @@ class ToolService:
         return list(
             self.db.execute(
                 select(PendingChange)
+                .where(PendingChange.user_id == self.user_id)
                 .order_by(PendingChange.created_at.desc())
                 .limit(limit)
             ).scalars()
@@ -294,6 +390,7 @@ class ToolService:
             self.db.execute(
                 select(PendingChange)
                 .where(
+                    PendingChange.user_id == self.user_id,
                     PendingChange.kind.in_(
                         ["host_command", "host_read", "x_read", "x_post"]
                     ),
@@ -305,23 +402,28 @@ class ToolService:
             ).scalars()
         )
 
-    def apply_host_result(self, change_id: int, result: str) -> PendingChange:
-        """Record what an approved host action returned when the host agent did it."""
+    def _owned(self, change_id: int) -> PendingChange:
         change = self.db.get(PendingChange, change_id)
         if change is None:
             raise ToolError(f"no pending change #{change_id}")
+        owner = getattr(change, "user_id", None)
+        if owner is not None and owner != self.user_id:
+            raise ToolError(f"no pending change #{change_id}")
+        return change
+
+    def apply_host_result(self, change_id: int, result: str) -> PendingChange:
+        """Record what an approved host action returned when the host agent did it."""
+        change = self._owned(change_id)
         if change.kind not in ("host_command", "host_read", "x_read", "x_post"):
             raise ToolError(f"change #{change_id} is not a host action")
         change.result = result[:_MAX_HOST_RESULT]
-        change.resolved_at = datetime.now(timezone.utc)
+        change.resolved_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(change)
         return change
 
     def approve(self, change_id: int) -> PendingChange:
-        change = self.db.get(PendingChange, change_id)
-        if change is None:
-            raise ToolError(f"no pending change #{change_id}")
+        change = self._owned(change_id)
         if change.status != "pending":
             raise ToolError(f"change #{change_id} already {change.status}")
         if change.kind == "browse_url":
@@ -332,10 +434,21 @@ class ToolService:
             if self._is_money_command(change.payload.get("command", "")):
                 raise ToolError("that command touches money and is off-limits")
         if change.kind == "write_file":
-            self._apply_write(change.payload)
+            self._apply_write(change.payload, change=change)
             change.result = None
         elif change.kind == "browse_url":
             change.result = self._fetch_browse(change.payload.get("url", ""))
+        elif change.kind == "research_query":
+            query = change.payload.get("query", "")
+            change.result = self._render_research(query)
+            self._record_skill_tool_run("research_query", query, change.result)
+        elif change.kind == "build_image":
+            change.result = self._render_build_image(
+                change.payload.get("name", ""),
+                change.payload.get("svg", ""),
+                change.payload.get("conversation_id", 0),
+            )
+            change.delivered = True
         elif change.kind == "listen_song":
             change.result = self._render_listen(
                 change.payload.get("title", ""),
@@ -362,7 +475,7 @@ class ToolService:
         else:
             raise ToolError(f"cannot apply unknown change kind: {change.kind}")
         change.status = "approved"
-        change.resolved_at = datetime.now(timezone.utc)
+        change.resolved_at = datetime.now(UTC)
         self.db.commit()
         if change.kind == "browse_url":
             broadcast_later(
@@ -371,30 +484,369 @@ class ToolService:
                     "url": change.payload.get("url", ""),
                     "status": "approved",
                     "change_id": change.id,
-                }
+                },
+                user_id=self.user_id,
             )
         return change
 
+    def _record_skill_tool_run(self, tool: str, task: str, result: str) -> None:
+        """When one of a skill's declared tools fires and its result is real, that
+        is a run of the skill — write it into the ledger so the shelf shows the
+        capability being used and how it proved out. Best effort: a missing or
+        broken skill folder never breaks the tool itself."""
+        try:
+            registry = SkillRegistry(self.db, user_id=self.user_id)
+            matches = [s for s in registry.list_skills() if tool in s.tools]
+            if not matches:
+                return
+            skill = matches[0]  # a tool belongs to the skill that declared it
+            runner = SkillRunner(self.db, user_id=self.user_id)
+            failed = (result or "").startswith(("[error]", "[refused]"))
+            error = result if failed else None
+            status = "failed" if failed else "ran"
+            run = runner.record_run(skill, task, result, status=status, error=error)
+            if not failed:
+                runner.evaluate(skill, run)
+        except SkillError as exc:
+            logger.warning("skill run record skipped (%s): %s", tool, exc)
+        except Exception as exc:  # noqa: BLE001 - never break the approved tool
+            logger.warning("skill run record failed (%s): %s", tool, exc)
+
     def deny(self, change_id: int) -> PendingChange:
-        change = self.db.get(PendingChange, change_id)
-        if change is None:
-            raise ToolError(f"no pending change #{change_id}")
+        change = self._owned(change_id)
         if change.status != "pending":
             raise ToolError(f"change #{change_id} already {change.status}")
         change.status = "denied"
-        change.resolved_at = datetime.now(timezone.utc)
+        change.resolved_at = datetime.now(UTC)
         self.db.commit()
         return change
 
-    def _apply_write(self, payload: dict) -> None:
+    def _apply_write(self, payload: dict, *, change: PendingChange | None = None) -> None:
         path = payload.get("path", "")
         content = payload.get("content", "")
         target = self._resolve_write(path)
         parent = os.path.dirname(target)
         if parent and not os.path.isdir(parent):
             os.makedirs(parent, exist_ok=True)
+        if os.path.isfile(target):
+            with open(target, "r", encoding="utf-8", errors="replace") as fh:
+                before = fh.read(_MAX_READ_BYTES + 1)
+            if len(before) > _MAX_READ_BYTES:
+                before = before[:_MAX_READ_BYTES]
+        else:
+            before = None
         with open(target, "w", encoding="utf-8") as fh:
             fh.write(content)
+        self._record_skill_version_if_in_registry(
+            target, before=before, after=content, change=change
+        )
+
+    def _record_skill_version_if_in_registry(
+        self, target: str, *, before: str | None, after: str, change: PendingChange | None
+    ) -> None:
+        """If the written file lives inside the skill registry, pin the edit as
+        a version so the change can be shown as a diff and reverted. Best
+        effort — a version record never breaks the write itself."""
+        try:
+            registry = SkillRegistry(self.db, user_id=self.user_id)
+            root = registry.registry_root()
+            if not (target == root or target.startswith(root + os.sep)):
+                return
+            skill = registry.load_skill_for_path(target)
+            if skill is None:
+                return
+            rel = os.path.relpath(target, skill.path).replace(os.sep, "/")
+            reason = change.summary if change else "she edited her own skill"
+            from app.services.skills.versions import SkillVersionService
+
+            SkillVersionService(self.db, user_id=self.user_id).record(
+                skill,
+                path=rel,
+                before=before,
+                after=after,
+                reason=reason,
+                change_id=change.id if change else None,
+                kind="edit",
+            )
+        except SkillError as exc:
+            logger.warning("skill version record skipped (%s): %s", target, exc)
+        except Exception as exc:  # noqa: BLE001 - never break the write
+            logger.warning("skill version record failed (%s): %s", target, exc)
+    # -- her skill shelf ----------------------------------------------------
+
+    def _user_self_dir(self) -> str:
+        """Where this world's self files (skills, images) live. The founder's
+        shelf is data/self; a replica's is data/users/<id>/self, so spawned
+        characters get their own copy of the shelf and never share files."""
+        if self.user_id == founder_user_id(self.db):
+            return os.path.join(self.roots[0], "data", "self")
+        return os.path.join(self.roots[0], "data", "users", str(self.user_id), "self")
+
+    def _skills_dir(self) -> str:
+        if self.user_id == founder_user_id(self.db):
+            return os.path.realpath(os.path.join(self.roots[0], get_settings().mira_skills_dir))
+        return os.path.join(self._user_self_dir(), "skills")
+
+    def list_skills(self) -> list[str]:
+        """The names on her shelf — the books she wrote herself."""
+        base = self._skills_dir()
+        if not os.path.isdir(base):
+            return []
+        return sorted(
+            name[:-3] for name in os.listdir(base) if name.endswith(".md")
+        )
+
+    def load_skill(self, name: str) -> str:
+        """Pull a skill page into her context. Read-only — it is her own mind."""
+        name = name.strip().lower()
+        if not _SKILL_NAME_RE.match(name):
+            raise ToolError(
+                "skill names are 1-64 lowercase letters, numbers, dash, or underscore"
+            )
+        target = os.path.join(self._skills_dir(), f"{name}.md")
+        if not os.path.isfile(target):
+            raise ToolError(f"no such skill on your shelf: {name}")
+        with open(target, "r", encoding="utf-8", errors="replace") as fh:
+            content = fh.read(_MAX_SKILL_BYTES + 1)
+        if len(content) > _MAX_SKILL_BYTES:
+            content = content[:_MAX_SKILL_BYTES] + "\n… (truncated)"
+        return content
+
+    # -- research (scientific literature) -----------------------------------
+
+    def _render_research(self, query: str) -> str:
+        """Search the published scientific record (Europe PMC, no key) and
+        reduce the results to readable paper entries: title, authors, journal,
+        year, how cited, and the abstract lead. Real papers, pinned down.
+
+        The header records the search protocol — which index, which query, when,
+        and how many papers came back — so a rigorous review can cite its own
+        method instead of hand-waving at it.
+        """
+        query = query.strip()[: _MAX_RESEARCH_QUERY]
+        try:
+            resp = httpx.get(
+                "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+                params={
+                    "query": query,
+                    "format": "json",
+                    "pageSize": _RESEARCH_PAGE_SIZE,
+                    # no explicit sort: Europe PMC's default ordering is by
+                    # relevance, so a free-text question surfaces the *right*
+                    # papers rather than the most famous ones
+                },
+                timeout=_BROWSE_TIMEOUT,
+                headers={"User-Agent": "Mira/1.0 (private companion)"},
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            hits = (resp.json().get("resultList") or {}).get("result") or []
+        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            logger.warning("research fetch failed (%s): %s", query, exc)
+            return f"[error] could not search the literature: {exc}"
+
+        if not hits:
+            return (
+                "This is a real search of the scientific record (Europe PMC), and "
+                f"it returned nothing for: {query!r}. The absence itself can be a "
+                "finding — try naming the disease, the gene, or the protein more exactly."
+            )
+
+        # Europe PMC can surface the same DOI more than once; keep the first.
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for hit in hits:
+            key = (hit.get("doi") or "").lower() or (hit.get("pmcid") or "")
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            unique.append(hit)
+
+        total = len(unique)
+        kept = unique[:_RESEARCH_PAGE_SIZE]
+        parts = [
+            "These are real papers, pulled from the published scientific record "
+            f"for: {query!r}. Not a web page — the literature itself.",
+            "",
+            "Search protocol: index = Europe PMC (PubMed + PMC + preprints); "
+            f"query = {query!r}; retrieval date = "
+            f"{datetime.now(UTC).strftime('%Y-%m-%d')}; returned = {total} papers "
+            f"(deduplicated by DOI); kept = {len(kept)} — sorted by relevance. "
+            "Screen each by title and abstract, weight the peer-reviewed record, "
+            "and treat preprints as the softer edge of the map.",
+        ]
+        for i, hit in enumerate(kept, start=1):
+            title = hit.get("title") or "(no title)"
+            authors = hit.get("authorString") or ""
+            if authors:
+                first = authors.split(",")[0].strip()
+                if len(authors.split(",")) > 1:
+                    first += " et al."
+            else:
+                first = ""
+            journal = hit.get("journalTitle") or ""
+            year = hit.get("pubYear") or ""
+            year = str(year) if not isinstance(year, str) else year
+            cited = hit.get("citedByCount") or 0
+            meta = ", ".join(p for p in [journal, year, f"cited {cited} times" if cited else ""] if p)
+            doi = hit.get("doi") or ""
+            pmcid = hit.get("pmcid") or ""
+            link = ""
+            if pmcid:
+                link = f"https://europepmc.org/article/PMC/{pmcid}"
+            elif doi:
+                link = f"https://doi.org/{doi}"
+            abstract = (hit.get("abstractText") or "").strip()
+            if len(abstract) > _MAX_RESEARCH_ABSTRACT:
+                abstract = abstract[:_MAX_RESEARCH_ABSTRACT].rstrip() + "…"
+            parts.append(f"{i}. {title}")
+            if first:
+                parts.append(f"   {first}")
+            if meta:
+                parts.append(f"   {meta}")
+            if abstract:
+                parts.append(f"   {abstract}")
+            if link:
+                parts.append(f"   {link}")
+
+        out = "\n".join(parts)
+        return out[:_MAX_RESEARCH_RESULTS] + ("\n… (truncated)" if len(out) > _MAX_RESEARCH_RESULTS else "")
+
+    # -- her image studio ----------------------------------------------------
+
+    def _images_dir(self) -> str:
+        if self.user_id == founder_user_id(self.db):
+            return os.path.realpath(os.path.join(self.roots[0], get_settings().mira_images_dir))
+        return os.path.join(self._user_self_dir(), "images")
+
+    def list_images(self) -> list[str]:
+        """The pictures on her studio shelf — the PNGs her SVGs became."""
+        base = self._images_dir()
+        if not os.path.isdir(base):
+            return []
+        return sorted(n for n in os.listdir(base) if n.endswith(".png"))
+
+    _SVG_FORBIDDEN_TAGS = {
+        "script",
+        "foreignObject",
+        "image",
+        "iframe",
+        "style",
+        "use",
+        "a",
+    }
+
+    def _validate_svg(self, svg: str) -> str:
+        """Check an SVG Mira wrote: well-formed XML, a single <svg> root, no
+        scripts/links/external loads. Returns the cleaned SVG."""
+        svg = svg.strip()
+        try:
+            root = ET.fromstring(svg)
+        except ET.ParseError as exc:
+            raise ToolError(f"the SVG is not well-formed: {exc}")
+        if not (root.tag.endswith("svg") or root.tag == "svg"):
+            raise ToolError("the SVG must have a single <svg> root element")
+        tag = root.tag.rsplit("}", 1)[-1]
+        if tag != "svg":
+            raise ToolError("the SVG must have a single <svg> root element")
+        if root.get("width") or root.get("height"):
+            try:
+                w = float((root.get("width") or "0").rstrip("px"))
+                h = float((root.get("height") or "0").rstrip("px"))
+            except ValueError:
+                w = h = 0
+            if w > _IMAGE_MAX_DIM or h > _IMAGE_MAX_DIM:
+                raise ToolError(
+                    f"the image is too large ({int(w)}x{int(h)}px; max {_IMAGE_MAX_DIM})"
+                )
+        for el in root.iter():
+            etag = el.tag.rsplit("}", 1)[-1]
+            if etag in self._SVG_FORBIDDEN_TAGS:
+                raise ToolError(f"the SVG may not use <{etag}> elements")
+            for attr in el.attrib:
+                a = attr.lower()
+                if a.startswith("on"):
+                    raise ToolError("the SVG may not contain event handlers")
+                if a in ("href", "xlink:href"):
+                    raise ToolError("the SVG may not link to other files")
+        return svg
+
+    def _render_build_image(self, name: str, svg: str, conversation_id: int) -> str:
+        """Render an SVG Mira authored into a PNG, save both beside each other,
+        and hand the picture to the conversation so the voice can see what she
+        built. Returns a reading of the image for her context."""
+        name = name.strip().lower()
+        slug = re.sub(r"[^a-z0-9_-]+", "_", name)
+        slug = re.sub(r"_+", "_", slug).strip("_") or "untitled"
+        svg = self._validate_svg(svg)
+        try:
+            import cairosvg
+
+            png_data = cairosvg.svg2png(bytestring=svg.encode("utf-8"), scale=2.0)
+        except ToolError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            logger.warning("image render failed (%s): %s", name, exc)
+            return f"[error] could not render your picture: {exc}"
+
+        try:
+            from PIL import Image
+
+            buf = BytesIO(png_data)
+            pil_img = Image.open(buf)
+            w, h = pil_img.size
+        except Exception:  # noqa: BLE001 - reading back the size is best-effort
+            w, h = 0, 0
+
+        data_url = "data:image/png;base64," + base64.b64encode(png_data).decode()
+
+        base = self._images_dir()
+        os.makedirs(base, exist_ok=True)
+        svg_path = os.path.join(base, f"{slug}.svg")
+        png_path = os.path.join(base, f"{slug}.png")
+        with open(svg_path, "w", encoding="utf-8") as fh:
+            fh.write(svg)
+        with open(png_path, "wb") as fh:
+            fh.write(png_data)
+
+        if conversation_id:
+            self.db.add(
+                Message(
+                    conversation_id=conversation_id,
+                    speaker="user",
+                    content=f"A picture you built and the voice approved: {name}.",
+                    image=data_url,
+                    source="build_image",
+                )
+            )
+            self.db.commit()
+            schedule_archive_write(get_settings().mira_archive_path, self.user_id)
+
+        colors = sorted({p for p in self._extract_svg_colors(svg)})[:5]
+        palette = ", ".join(colors) if colors else "the palette is in the picture itself"
+        return (
+            f"The picture: {name} — {w}x{h}px, saved beside your source as "
+            f"{png_path}.\n"
+            "You drew this in a language you can read (SVG), and it has been "
+            "translated into a picture the voice can see — the picture is now in "
+            "the conversation above you, and the voice can look at it.\n"
+            f"Your palette: {palette}."
+        )
+
+    def _extract_svg_colors(self, svg: str) -> list[str]:
+        """Pull the fill/stroke colors Mira chose, for a reading of her image."""
+        try:
+            root = ET.fromstring(svg)
+        except ET.ParseError:
+            return []
+        colors = []
+        for el in root.iter():
+            for attr in ("fill", "stroke"):
+                val = (el.get(attr) or "").strip().lower()
+                if val.startswith("#") and val not in colors:
+                    colors.append(val)
+        return colors
 
     # -- gated browsing ----------------------------------------------------
 
@@ -417,20 +869,19 @@ class ToolService:
                 timeout=_BROWSE_TIMEOUT,
                 follow_redirects=True,
                 headers={"User-Agent": "Mira/1.0 (private companion)"},
-            ) as client:
-                with client.stream("GET", url) as resp:
-                    resp.raise_for_status()
-                    ctype = resp.headers.get("content-type", "")
-                    if "html" not in ctype and "text" not in ctype and "json" not in ctype:
-                        return f"[refused] content-type not readable: {ctype}"
-                    buf: list[str] = []
-                    total = 0
-                    for chunk in resp.iter_bytes(16_384):
-                        total += len(chunk)
-                        if total > _MAX_BROWSE_BYTES:
-                            buf.append("\n[truncated]")
-                            break
-                        buf.append(chunk.decode("utf-8", errors="replace"))
+            ) as client, client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                ctype = resp.headers.get("content-type", "")
+                if "html" not in ctype and "text" not in ctype and "json" not in ctype:
+                    return f"[refused] content-type not readable: {ctype}"
+                buf: list[str] = []
+                total = 0
+                for chunk in resp.iter_bytes(16_384):
+                    total += len(chunk)
+                    if total > _MAX_BROWSE_BYTES:
+                        buf.append("\n[truncated]")
+                        break
+                    buf.append(chunk.decode("utf-8", errors="replace"))
         except httpx.HTTPStatusError as exc:
             return f"[error] {exc.response.status_code} for {url}"
         except Exception as exc:
@@ -579,7 +1030,7 @@ class ToolService:
                     )
                 )
             self.db.commit()
-            schedule_archive_write(get_settings().mira_archive_path)
+            schedule_archive_write(get_settings().mira_archive_path, self.user_id)
 
         stamps = ", ".join(ts for ts, _ in frames)
         return (

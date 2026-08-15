@@ -1,6 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 import httpx
+
+from app.services.identity import get_current_user_id
 
 router = APIRouter(tags=["mira"])
 
@@ -8,7 +10,14 @@ _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 
 
 @router.get("/mira/browse/view", response_class=HTMLResponse)
-async def browse_view(url: str, depth: int = 0) -> HTMLResponse:
+async def browse_view(
+    url: str,
+    depth: int = 0,
+    _: int = Depends(get_current_user_id),
+) -> HTMLResponse:
+    """The mini-browser panel: renders a page inside the app. Loaded in an
+    iframe, so it authenticates through the ``?token=`` query param (session or
+    founder token) rather than a header."""
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=True,

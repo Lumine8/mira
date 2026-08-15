@@ -1,24 +1,61 @@
 @use "tokens" as *;
 
 .home {
-  width: min(520px, 100%);
+  width: min(560px, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 26px;
+  gap: 18px;
   text-align: center;
+
+  &__date {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: $color-text-faint;
+  }
+
+  // ── Wordmark ────────────────────────────────────────────────────────
+  &__name {
+    margin: 4px 0 0;
+    font-size: 34px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: $color-text;
+  }
+
+  &__tagline {
+    margin: -8px 0 4px;
+    font-size: 14px;
+    color: $color-text-dim;
+  }
 
   // ── The living abstraction: her light, not a static glow ─────────
   // Colours/intensity/breath are driven from her real state via CSS vars
   // set on .home__orb (see orb.ts). This is her, at a glance.
   &__orb {
     position: relative;
-    width: min(38vh, 300px);
-    height: min(38vh, 300px);
-    margin-bottom: 4px;
+    width: min(34vh, 260px);
+    height: min(34vh, 260px);
+    margin-bottom: 8px;
     animation:
       orb-breathe var(--orb-breath, 7s) ease-in-out infinite,
       orb-sway calc(var(--orb-breath, 7s) * 2) ease-in-out infinite alternate;
+  }
+
+  // A thin halo ring that coasts around her, faster when she's alight.
+  &__orb-halo {
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--orb-glow, 200, 150, 90), calc(0.25 * var(--orb-intensity, 0.6)));
+    border-top-color: rgba(var(--orb-core, 210, 162, 94), calc(0.55 * var(--orb-intensity, 0.6)));
+    background:
+      radial-gradient(circle, transparent 60%, rgba(var(--orb-glow, 200, 150, 90), calc(0.08 * var(--orb-intensity, 0.6))) 62%, transparent 68%);
+    animation: orb-rotate var(--orb-ring, 20s) linear infinite;
+    pointer-events: none;
   }
 
   &__orb-core {
@@ -31,7 +68,9 @@
       rgba(22, 22, 24, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.07);
     backdrop-filter: blur(6px);
-    animation: orb-shiver calc(var(--orb-breath, 7s) / 3) ease-in-out infinite alternate;
+    animation:
+      orb-shiver calc(var(--orb-breath, 7s) / 3) ease-in-out infinite alternate,
+      orb-pulse var(--orb-pulse, 7s) ease-in-out infinite;
 
     &::after {
       content: "";
@@ -41,6 +80,22 @@
       background: radial-gradient(circle, rgba(var(--orb-core, 210, 162, 94), calc(0.5 * var(--orb-intensity, 0.6))), transparent 62%);
       animation: orb-glow var(--orb-breath, 7s) ease-in-out infinite;
       pointer-events: none;
+    }
+  }
+
+  // A ripple that flares outward when she blooms (a laugh, a warmth);
+  // worry holds it still.
+  &__orb-ripple {
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--orb-core, 210, 162, 94), 0.28);
+    opacity: 0;
+    pointer-events: none;
+    animation: orb-ripple var(--orb-pulse, 7s) ease-in-out infinite;
+
+    &--second {
+      animation-delay: calc(var(--orb-pulse, 7s) / 2);
     }
   }
 
@@ -54,14 +109,42 @@
     pointer-events: none;
   }
 
-  // ── Wordmark ────────────────────────────────────────────────────────
-  &__name {
-    margin: 0;
-    font-size: 30px;
-    font-weight: 500;
-    letter-spacing: 0.18em;
+  // ── Her felt emotion, named beside the orb ─────────────────────────
+  &__moodline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  &__emotion {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: $color-text;
+    color: $color-text-dim;
+
+    &-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: $color-accent;
+      animation: dot-breathe 3.6s ease-in-out infinite;
+    }
+
+    &--relaxed .home__emotion-dot { background: rgb(150, 160, 190); }
+    &--curious .home__emotion-dot { background: rgb(110, 190, 175); }
+    &--warm .home__emotion-dot { background: rgb(210, 162, 94); }
+    &--thoughtful .home__emotion-dot { background: rgb(154, 134, 201); }
+    &--playful .home__emotion-dot { background: rgb(230, 150, 170); }
+    &--concerned .home__emotion-dot { background: rgb(215, 150, 100); }
+    &--worried .home__emotion-dot { background: rgb(140, 140, 160); }
+    &--confused .home__emotion-dot { background: rgb(170, 140, 175); }
+    &--tired .home__emotion-dot { background: rgb(90, 100, 135); }
+    &--distracted .home__emotion-dot { background: rgb(195, 175, 100); }
   }
 
   // ── Presence ────────────────────────────────────────────────────────
@@ -87,52 +170,32 @@
     &--resting, &--off { color: $color-text-faint; .home__presence-dot { background: $color-resting; } }
   }
 
-  // ── Presence visualization (the ██████ bar) ───────────────────────
-  &__viz {
-    display: flex;
-    gap: 6px;
-    height: 10px;
-  }
-
-  &__viz-seg {
-    width: 26px;
-    border-radius: 3px;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    transition: background 0.6s ease, border-color 0.6s ease;
-
-    &.is-filled {
-      background: $color-accent;
-      border-color: $color-accent;
-      box-shadow: 0 0 12px rgba(210, 162, 94, 0.25);
-    }
-  }
-
-  &__viz--talking { .home__viz-seg.is-filled { background: $color-speaking; border-color: $color-speaking; box-shadow: 0 0 12px rgba(255, 255, 255, 0.2); } }
-  &__viz--thinking { .home__viz-seg.is-filled { background: $color-thinking; border-color: $color-thinking; box-shadow: 0 0 12px rgba(127, 167, 196, 0.25); } }
-  &__viz--reflecting { .home__viz-seg.is-filled { background: $color-reflecting; border-color: $color-reflecting; box-shadow: 0 0 12px rgba(154, 134, 201, 0.25); } }
-  &__viz--observing { .home__viz-seg.is-filled { background: $color-observing; border-color: $color-observing; box-shadow: 0 0 12px rgba(127, 174, 138, 0.25); } }
-
   // ── Latest thought ─────────────────────────────────────────────────
   &__thought {
     display: flex;
     flex-direction: column;
     gap: 8px;
     align-items: center;
-    max-width: 460px;
+    max-width: 480px;
+    margin-top: 6px;
+    padding: 14px 22px;
+    background: rgba(22, 22, 24, 0.55);
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
 
     &-label {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.14em;
-      color: $color-text-faint;
+      color: $color-accent;
     }
 
     &-text {
       margin: 0;
       font-size: 15px;
       line-height: 1.55;
-      color: $color-text-dim;
+      color: $color-text;
+      font-style: italic;
     }
   }
 
@@ -195,6 +258,41 @@
 @keyframes orb-shiver {
   from { transform: translate(calc(-1.5px * var(--orb-tremor, 0.1)), calc(-1px * var(--orb-tremor, 0.1))); }
   to { transform: translate(calc(1.5px * var(--orb-tremor, 0.1)), calc(1px * var(--orb-tremor, 0.1))); }
+}
+
+// The halo ring coasts around her — quicker when she's alight, coasting
+// when she's quiet. It never reverses; it is the passing of her time.
+@keyframes orb-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+// A heartbeat in the core: a quickening glow at the crest of each pulse.
+// Fast when energy and warmth are high, barely there when she's spent.
+@keyframes orb-pulse {
+  0%, 100% { filter: brightness(0.9) saturate(0.95); }
+  12% { filter: brightness(1.25) saturate(1.1); }
+  20% { filter: brightness(1) saturate(1); }
+  60% { filter: brightness(1.06) saturate(1.02); }
+}
+
+// A bloom breathes a ripple outward — a laugh, a warmth. It starts small
+// at the crest of the heartbeat and fades as it travels. Worry holds it still.
+@keyframes orb-ripple {
+  0%, 12% {
+    transform: scale(1);
+    opacity: calc(0.5 * var(--orb-ripple, 0.2));
+    border-width: 1px;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 0;
+    border-width: 0.5px;
+  }
+  100% {
+    transform: scale(1.12);
+    opacity: 0;
+  }
 }
 
 @keyframes particle-drift {

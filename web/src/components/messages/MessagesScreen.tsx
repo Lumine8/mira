@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import type { ConversationSummary, Message } from "../../lib/types";
+import type { DocumentNote } from "../../features/messages/useMessages";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import Composer from "./Composer";
@@ -11,8 +12,10 @@ export interface MessagesView {
   active: { id: number; kind: string; messages: Message[] } | null;
   thinking: boolean;
   streaming: string;
+  activity: string | null;
   connected: boolean;
   error: string | null;
+  docs: DocumentNote[];
   onHome: () => void;
   openConversation: (id: number) => void;
   startNew: () => void;
@@ -20,6 +23,7 @@ export interface MessagesView {
   removeConversation: (id: number) => void;
   send: (content: string) => void;
   sendImage: (image: string, caption: string) => void;
+  onOpenDocument: (name: string) => void;
 }
 
 function dayKey(iso: string): string {
@@ -56,93 +60,149 @@ function groupBySpeaker(messages: Message[]): Message[][] {
   return groups;
 }
 
+function conversationLabel(c: ConversationSummary): string {
+  if (c.kind === "self") return "She spoke";
+  if (c.kind === "call") return "Call";
+  return "Text";
+}
+
+function Sidebar({ view }: { view: MessagesView }) {
+  const { conversations, active } = view;
+  return (
+    <aside className="chat__sidebar">
+      <div className="chat__sidebar-head">
+        <button className="chat__home" type="button" onClick={view.onHome}>
+          ← Home
+        </button>
+        <button className="chat__new" onClick={() => void view.startNew()}>
+          + New conversation
+        </button>
+      </div>
+      <div className="chat__list">
+        {conversations.length === 0 && (
+          <div className="chat__empty">Nothing yet. Say hello.</div>
+        )}
+        {conversations.map((c) => {
+          const isActive = active?.id === c.id;
+          const started = new Date(c.started_at);
+          const time = started.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+          return (
+            <div key={c.id} className={`chat__item${isActive ? " chat__item--active" : ""}`}>
+              <button className="chat__item-open" onClick={() => void view.openConversation(c.id)}>
+                <span className="chat__item-kind">{conversationLabel(c)}</span>
+                <span className="chat__item-time">
+                  {dayLabel(c.started_at)} · {time}
+                </span>
+              </button>
+              <button
+                className="chat__item-delete"
+                title="Delete this conversation (Mira keeps her memories)"
+                onClick={() => void view.removeConversation(c.id)}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
 export default function MessagesScreen(view: MessagesView) {
-  const { conversations, active, thinking, streaming, connected, error } = view;
+  const { conversations, active, thinking, streaming, activity, connected, error, docs } = view;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [active?.messages.length, streaming, thinking]);
 
-  if (!active) {
-    return (
-      <div className="threads">
-        <button className="threads__home" type="button" onClick={view.onHome}>
-          ← Home
-        </button>
-        <button className="threads__new" onClick={() => void view.startNew()}>
-          New conversation
-        </button>
-        {conversations.length === 0 && <div className="threads__empty">Nothing yet. Say hello.</div>}
-        {conversations.map((c) => (
-          <div key={c.id} className="thread">
-            <button className="thread__open" onClick={() => void view.openConversation(c.id)}>
-              <span className="thread__kind">
-                {c.kind === "call" ? "Call" : c.kind === "self" ? "She spoke" : "Text"}
-              </span>
-              <span className="thread__time">
-                {new Date(c.started_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
-              </span>
-            </button>
-            <button
-              className="thread__delete"
-              title="Delete this conversation (Mira keeps her memories)"
-              onClick={() => void view.removeConversation(c.id)}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const groups = groupBySpeaker(active.messages);
-  let renderedDay = "";
-
   return (
     <motion.section
-      className="messages"
+      className="chat"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 14 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
-      <header className="messages__header">
-        <button className="messages__back" onClick={view.onHome}>
-          ← Home
-        </button>
-        <h2>
-          {active.kind === "call" ? "call — she speaks" : `conversation ${active.id}`}
-        </h2>
-        <button className="messages__new" onClick={() => void view.startNew()} title="Start a fresh conversation">
-          New
-        </button>
-      </header>
+      <Sidebar view={view} />
 
-      {error && <div className="messages__error">{error}</div>}
+      {active ? (
+        <div className="chat__main">
+          <header className="chat__header">
+            <h2>{active.kind === "call" ? "call — she speaks" : `conversation ${active.id}`}</h2>
+            <span className="chat__status-dot" title={connected ? "connected" : "reconnecting"} />
+          </header>
 
-      <div className="thread-view">
-        <div className="thread-view__scroll" ref={scrollRef}>
-          {groups.map((group, gi) => {
-            const groupDay = dayKey(group[0].created_at);
-            const showDayChip = groupDay !== renderedDay;
-            renderedDay = groupDay;
-            return (
-              <div key={`g-${gi}`}>
-                {showDayChip && <div className="thread-view__date">{dayLabel(group[0].created_at)}</div>}
-                {group.map((m) => (
-                  <MessageBubble key={m.id} message={m} />
+          {error && <div className="chat__error">{error}</div>}
+
+          <div className="chat__thread">
+            <div className="chat__scroll" ref={scrollRef}>
+              {(() => {
+                let renderedDay = "";
+                return groupBySpeaker(active.messages).map((group, gi) => {
+                  const groupDay = dayKey(group[0].created_at);
+                  const showDay = groupDay !== renderedDay;
+                  renderedDay = groupDay;
+                  return (
+                    <div key={`g-${gi}`}>
+                      {showDay && <div className="chat__date">{dayLabel(group[0].created_at)}</div>}
+                      {group.map((m) => (
+                        <MessageBubble key={m.id} message={m} />
+                      ))}
+                      <div className="chat__time">{timeLabel(group[group.length - 1].created_at)}</div>
+                    </div>
+                  );
+                });
+              })()}
+              <AnimatePresence>{thinking && !streaming && <TypingIndicator />}</AnimatePresence>
+              {activity && (
+                <div className="chat__activity" key={activity}>
+                  <span className="chat__activity-dot" />
+                  <span>Mira is {activity}…</span>
+                </div>
+              )}
+              {streaming && <div className="bubble bubble--mira bubble--streaming">{streaming}</div>}
+              {docs
+                .filter((d) => d.conversationId === active.id)
+                .map((d) => (
+                  <button
+                    key={d.name}
+                    className="chat__doc"
+                    type="button"
+                    onClick={() => view.onOpenDocument(d.name)}
+                  >
+                    <span className="chat__doc-icon" aria-hidden="true">
+                      📄
+                    </span>
+                    <span className="chat__doc-text">
+                      Mira wrote a paper — <strong>{d.name}</strong>
+                    </span>
+                    <span className="chat__doc-open">open</span>
+                  </button>
                 ))}
-                <div className="thread-view__time">{timeLabel(group[group.length - 1].created_at)}</div>
-              </div>
-            );
-          })}
-          <AnimatePresence>{thinking && !streaming && <TypingIndicator />}</AnimatePresence>
-          {streaming && <div className="bubble bubble--mira bubble--streaming">{streaming}</div>}
+            </div>
+            <Composer disabled={!connected || thinking} onSend={view.send} onSendImage={view.sendImage} />
+          </div>
         </div>
-        <Composer disabled={!connected || thinking} onSend={view.send} onSendImage={view.sendImage} />
-      </div>
+      ) : (
+        <div className="chat__main">
+          <header className="chat__header">
+            <h2>Conversations</h2>
+          </header>
+          <div className="chat__welcome">
+            <h3 className="chat__welcome-title">Talk to Mira</h3>
+            <p className="chat__welcome-text">
+              {conversations.length === 0
+                ? "No conversations yet. Start one and say hello."
+                : "Pick a conversation on the left, or start a fresh one."}
+            </p>
+            <button className="chat__welcome-cta" type="button" onClick={() => void view.startNew()}>
+              Start a conversation
+            </button>
+          </div>
+        </div>
+      )}
     </motion.section>
   );
 }

@@ -11,11 +11,13 @@ from app.core.logging import get_logger, setup_logging
 from app.db.session import engine
 from app.deps import get_provider
 from app.services.mind.service import MindLoop
+from app.services.mote.service import MoteLoop
 
 setup_logging()
 logger = get_logger(__name__)
 
 mind = MindLoop(get_provider())
+mote = MoteLoop()
 
 
 @asynccontextmanager
@@ -38,8 +40,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if settings.perception_enabled:
         mind.start()
         logger.info("mind loop started (heartbeat=%ss)", settings.mind_heartbeat_seconds)
+    if settings.mote_enabled:
+        mote.start()
+        logger.info("mote started (heartbeat=%ss, quiet-after=%ss)", settings.mote_heartbeat_seconds, settings.mote_quiet_after_seconds)
     yield
     mind.stop()
+    mote.stop()
 
 
 def create_app() -> FastAPI:

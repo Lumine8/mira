@@ -46,7 +46,7 @@ async def test_schedule_digest_bounds_queue_and_keeps_newest(monkeypatch) -> Non
 
     # First two turns are kept; the third pushes the oldest out.
     for n in range(3):
-        self_service.schedule_digest(FakeProvider(), n, f"in {n}", f"reply {n}", [])
+        self_service.schedule_digest(FakeProvider(), n, 1, f"in {n}", f"reply {n}", [])
 
     queue = self_service._DIGEST_QUEUE
     assert isinstance(queue, deque)
@@ -62,5 +62,5 @@ async def test_schedule_digest_skipped_when_self_model_disabled(monkeypatch) -> 
     disabled.self_model_enabled = False
     monkeypatch.setattr(self_service, "get_settings", lambda: disabled)
 
-    self_service.schedule_digest(FakeProvider(), 42, "in", "reply", [])
+    self_service.schedule_digest(FakeProvider(), 42, 1, "in", "reply", [])
     assert len(self_service._DIGEST_QUEUE) == 0

@@ -45,10 +45,12 @@ def _render_message(m: Message) -> str:
     return f"{header} — {_fmt(m.created_at)}:\n\n{body}"
 
 
-def render_conversations(db: Session) -> str:
-    """Render every conversation, oldest first, into a single markdown doc."""
+def render_conversations(db: Session, *, user_id: int) -> str:
+    """Render every conversation of one user, oldest first, into markdown."""
     conversations = db.execute(
-        select(Conversation).order_by(Conversation.started_at.asc(), Conversation.id.asc())
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.started_at.asc(), Conversation.id.asc())
     ).scalars()
     parts = [
         "# Mira — Full Conversation Log",
@@ -85,9 +87,9 @@ def render_conversations(db: Session) -> str:
     return "\n".join(parts)
 
 
-def write_archive(path: str | Path) -> None:
-    """Regenerate the archive from the DB. Safe to call on every message
-    commit; the lock serializes writers and the whole file is rebuilt."""
+def write_archive(path: str | Path, user_id: int) -> None:
+    """Regenerate the archive from the DB for one user. Safe to call on every
+    message commit; the lock serializes writers and the whole file is rebuilt."""
     if not path:
         return
     from app.db.session import SessionLocal
@@ -96,7 +98,7 @@ def write_archive(path: str | Path) -> None:
         try:
             db = SessionLocal()
             try:
-                text = render_conversations(db)
+                text = render_conversations(db, user_id=user_id)
             finally:
                 db.close()
             target = Path(path)
@@ -106,8 +108,8 @@ def write_archive(path: str | Path) -> None:
             logger.warning("conversation archive write failed: %s", exc)
 
 
-def schedule_archive_write(path: str | Path) -> None:
+def schedule_archive_write(path: str | Path, user_id: int) -> None:
     """Write the archive off the hot path so a turn is never blocked on disk."""
     import threading as _t
 
-    _t.Thread(target=write_archive, args=(path,), daemon=True).start()
+    _t.Thread(target=write_archive, args=(path, user_id), daemon=True).start()

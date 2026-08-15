@@ -29,6 +29,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     question: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(24), default="self_authored")
     origin: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

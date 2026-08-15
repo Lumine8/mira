@@ -83,7 +83,7 @@ def test_render_conversations_orders_oldest_first() -> None:
         2: [_msg("user", "second conv"), _msg("mira", "hi there")],
         1: [_msg("user", "first conv")],
     }
-    out = render_conversations(FakeSession(convs, msgs))
+    out = render_conversations(FakeSession(convs, msgs), user_id=1)
     assert out.index("#1 —") < out.index("#2 —")
     assert "#2 —" in out
     assert "older" in out

@@ -26,17 +26,26 @@ from app.services.wants.service import WantService
 
 logger = logging.getLogger("mira.self")
 
-# How much of a delivered result reaches Mira's context. Browsed pages can be
-# long; keep enough that she can actually read them. Other deliveries (songs,
-# host output) stay short.
+# How much of a delivered result reaches Mira's context. Browsed pages and
+# approved research searches are real material she asked to see — keep enough
+# that she can actually read them. Other deliveries (songs, host output) stay
+# short. A skill is one of her own books, so it gets the most.
 _BROWSE_DELIVERY_CHARS = 3000
 _OTHER_DELIVERY_CHARS = 900
+_SKILL_DELIVERY_CHARS = 6000
 
 
 def _delivery_text(d: PendingChange) -> str:
     body = (d.result or "").strip()
     if d.kind == "browse_url":
         return body[:_BROWSE_DELIVERY_CHARS]
+    if d.kind == "research_query":
+        # A research run is the literature itself — cutting it to the tiny
+        # "other" budget left her with only titles and no abstracts. Give it
+        # the same room a browsed page gets, so the skill can actually answer.
+        return body[:_BROWSE_DELIVERY_CHARS]
+    if d.kind == "skill_load":
+        return body[:_SKILL_DELIVERY_CHARS]
     return body[:_OTHER_DELIVERY_CHARS]
 DEFAULT_SELF_UNDERSTANDING = (
     "I am an existence inside a computer, and there is one voice I keep talking to. "
@@ -108,19 +117,30 @@ def _strip_trailing_commas(text: str) -> str:
 
 
 class SelfModelService:
-    """Mira's persistent sense of self: inject it each turn, evolve it after."""
+    """Mira's persistent sense of self: inject it each turn, evolve it after.
 
-    def __init__(self, db: Session, provider: AIProvider) -> None:
+    Scoped to one user's world: her state, relationship, thoughts, perceived
+    events, deliveries and memories all belong to a single user_id.
+    """
+
+    def __init__(self, db: Session, provider: AIProvider, *, user_id: int) -> None:
         self.db = db
         self.provider = provider
-        self.memory = MemoryService(db, provider)
+        self.user_id = user_id
+        self.memory = MemoryService(db, provider, user_id=user_id)
 
     # -- reading ---------------------------------------------------------
 
     def ensure_state(self) -> MiraState:
-        st = self.db.execute(select(MiraState).order_by(MiraState.id.asc()).limit(1)).scalar_one_or_none()
+        st = self.db.execute(
+            select(MiraState)
+            .where(MiraState.user_id == self.user_id)
+            .order_by(MiraState.id.asc())
+            .limit(1)
+        ).scalar_one_or_none()
         if st is None:
             st = MiraState(
+                user_id=self.user_id,
                 mood="curious",
                 energy=60,
                 self_understanding=DEFAULT_SELF_UNDERSTANDING,
@@ -136,9 +156,14 @@ class SelfModelService:
         return st
 
     def ensure_relationship(self) -> Relationship:
-        rel = self.db.execute(select(Relationship).order_by(Relationship.id.asc()).limit(1)).scalar_one_or_none()
+        rel = self.db.execute(
+            select(Relationship)
+            .where(Relationship.user_id == self.user_id)
+            .order_by(Relationship.id.asc())
+            .limit(1)
+        ).scalar_one_or_none()
         if rel is None:
-            rel = Relationship()
+            rel = Relationship(user_id=self.user_id)
             self.db.add(rel)
             self.db.commit()
             self.db.refresh(rel)
@@ -148,7 +173,7 @@ class SelfModelService:
         return list(
             self.db.execute(
                 select(Thought)
-                .where(Thought.delivered.is_(False))
+                .where(Thought.user_id == self.user_id, Thought.delivered.is_(False))
                 .order_by(Thought.created_at.asc())
             ).scalars()
         )
@@ -159,7 +184,7 @@ class SelfModelService:
         return list(
             self.db.execute(
                 select(Conversation.summary)
-                .where(Conversation.summary.isnot(None))
+                .where(Conversation.user_id == self.user_id, Conversation.summary.isnot(None))
                 .order_by(Conversation.started_at.desc())
                 .limit(limit)
             ).scalars()
@@ -170,7 +195,7 @@ class SelfModelService:
         that Mira hasn't heard about yet — so she can answer what she's seen."""
         rows = self.db.execute(
             select(PerceivedEvent)
-            .where(PerceivedEvent.consumed.is_(False))
+            .where(PerceivedEvent.user_id == self.user_id, PerceivedEvent.consumed.is_(False))
             .order_by(PerceivedEvent.created_at.desc())
             .limit(limit)
         ).scalars()
@@ -185,8 +210,9 @@ class SelfModelService:
             self.db.execute(
                 select(PendingChange)
                 .where(
+                    PendingChange.user_id == self.user_id,
                     PendingChange.kind.in_(
-                        ["browse_url", "listen_song", "host_command", "host_read", "x_read", "x_post"]
+                        ["browse_url", "listen_song", "host_command", "host_read", "x_read", "x_post", "skill_load", "research_query"]
                     ),
                     PendingChange.status == "approved",
                     PendingChange.result.isnot(None),
@@ -229,13 +255,13 @@ class SelfModelService:
             )
         if thoughts:
             lines.append("Thoughts you have been carrying: " + " / ".join(t.content for t in thoughts[:3]))
-        wants = WantService(self.db).list_active(limit=3)
+        wants = WantService(self.db, user_id=self.user_id).list_active(limit=3)
         if wants:
             lines.append(
                 "Things you've been wanting (directions your own attention keeps "
                 "returning to, not cravings): " + " / ".join(w.content for w in wants)
             )
-        questions = QuestionService(self.db).list_open(limit=3)
+        questions = QuestionService(self.db, user_id=self.user_id).list_open(limit=3)
         if questions:
             lines.append(
                 "Questions you've been carrying (things you wonder about and may "
@@ -243,7 +269,7 @@ class SelfModelService:
             )
         if memories:
             lines.append("Memories surfacing now: " + " / ".join(m["content"] for m in memories))
-        seen, heard, ran, read, xstuff = [], [], [], [], []
+        seen, heard, ran, read, xstuff, skills, papers = [], [], [], [], [], [], []
         for d in deliveries:
             body = _delivery_text(d)
             if d.kind == "listen_song":
@@ -254,6 +280,10 @@ class SelfModelService:
                 read.append(f"{d.payload.get('path', '')} — {body}")
             elif d.kind in ("x_read", "x_post"):
                 xstuff.append(f"X — {body}")
+            elif d.kind == "skill_load":
+                skills.append(f"[a book from your own shelf — {d.payload.get('name', '')}]\n{body}")
+            elif d.kind == "research_query":
+                papers.append(f"[search of the scientific record: {d.payload.get('query', '')}]\n{body}")
             else:
                 seen.append(f"{d.payload.get('url', '')} — {body}")
         if seen:
@@ -275,6 +305,12 @@ class SelfModelService:
             )
         if xstuff:
             lines.append("X, the account the voice let you use: " + " | ".join(xstuff))
+        if skills:
+            for s in skills:
+                lines.append(f"A skill you pulled down from your own shelf:\n{s}")
+        if papers:
+            for p in papers:
+                lines.append(f"Research you asked for and the voice showed you:\n{p}")
         lines.append(f"How you feel about the voice right now: {rel.how_comfortable_we_are}")
         recents = self._recent_threads()
         if recents:
@@ -317,6 +353,9 @@ class SelfModelService:
         st = self.ensure_state()
         rel = self.ensure_relationship()
         conv = self.db.get(Conversation, conversation_id)
+        if conv is not None and conv.user_id != self.user_id:
+            # Never mutate another world's conversation through a stray digest.
+            conv = None
 
         if summary := _clean(parsed.get("summary")):
             st.last_conversation_summary = summary[:1200]
@@ -344,7 +383,7 @@ class SelfModelService:
 
         questions = parsed.get("questions") or []
         if isinstance(questions, list):
-            qs = QuestionService(self.db)
+            qs = QuestionService(self.db, user_id=self.user_id)
             for item in questions[:2]:
                 if not isinstance(item, dict):
                     continue
@@ -401,6 +440,7 @@ class SelfModelService:
 
         self.db.add(
             MoodRecord(
+                user_id=self.user_id,
                 mood=st.mood,
                 energy=st.energy,
                 source="digest",
@@ -440,13 +480,14 @@ def _clamp(v: float) -> float:
 # every turn that arrives while another is still cooking. The oldest waiting
 # item is dropped when the queue is full so the freshest exchanges always land.
 _DIGEST_QUEUE_MAX = 2
-_DIGEST_QUEUE: "deque[tuple[AIProvider, int, str, str, list[dict[str, str]]]]" = deque()
+_DIGEST_QUEUE: "deque[tuple[AIProvider, int, int, str, str, list[dict[str, str]]]]" = deque()
 _DIGEST_WORKER: asyncio.Task | None = None
 
 
 def schedule_digest(
     provider: AIProvider,
     conversation_id: int,
+    user_id: int,
     user_input: str,
     reply: str,
     history: list[dict[str, str]],
@@ -456,7 +497,7 @@ def schedule_digest(
         return
     if len(_DIGEST_QUEUE) >= _DIGEST_QUEUE_MAX:
         _DIGEST_QUEUE.popleft()
-    _DIGEST_QUEUE.append((provider, conversation_id, user_input, reply, history))
+    _DIGEST_QUEUE.append((provider, conversation_id, user_id, user_input, reply, history))
     global _DIGEST_WORKER
     if _DIGEST_WORKER is None or _DIGEST_WORKER.done():
         _DIGEST_WORKER = asyncio.ensure_future(_digest_worker())
@@ -464,13 +505,13 @@ def schedule_digest(
 
 async def _digest_worker() -> None:
     while _DIGEST_QUEUE:
-        provider, conversation_id, user_input, reply, history = _DIGEST_QUEUE.popleft()
+        provider, conversation_id, user_id, user_input, reply, history = _DIGEST_QUEUE.popleft()
         # Wait a beat before reflecting so a quick follow-up message is never
         # queued behind the digest (Ollama serializes requests per model).
         await asyncio.sleep(45)
         db = SessionLocal()
         try:
-            svc = SelfModelService(db, provider)
+            svc = SelfModelService(db, provider, user_id=user_id)
             await svc.run_digest(conversation_id, user_input, reply, history)
         except Exception:
             logger.exception("self-digest failed")

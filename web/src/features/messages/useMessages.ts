@@ -56,19 +56,41 @@ function notify(body: string) {
   }
 }
 
+export interface DocumentNote {
+  name: string;
+  author: "founder" | "mira";
+  conversationId: number;
+}
+
 export function useMessages() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [active, setActive] = useState<ActiveThread | null>(null);
   const [thinking, setThinking] = useState(false);
   const [streaming, setStreaming] = useState("");
+  const [activity, setActivity] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [changeHistory, setChangeHistory] = useState<PendingChange[]>([]);
   const [currentRequest, setCurrentRequest] = useState<PendingChange | null>(null);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [docs, setDocs] = useState<DocumentNote[]>([]);
   const socketRef = useRef<MiraSocket | null>(null);
   const activeRef = useRef<ActiveThread | null>(null);
   const spokenRef = useRef<string | null>(null);
+  const streamingRef = useRef("");
+
+  /** Remember that a document exists for a conversation (a research paper she
+   *  just wrote), so its chip stays available even after switching away and
+   *  back — and never duplicates. */
+  const noteDocument = useCallback((d: DocumentNote) => {
+    setDocs((prev) =>
+      prev.some((x) => x.name === d.name && x.conversationId === d.conversationId)
+        ? prev
+        : [...prev, d],
+    );
+  }, []);
 
   const mergePending = useCallback((changes: PendingChange[]) => {
     // Never open a request that has already been acted on (auto-approved kinds
@@ -122,7 +144,9 @@ export function useMessages() {
   const openConversation = useCallback(async (id: number) => {
     socketRef.current?.close();
     setStreaming("");
+    streamingRef.current = "";
     setThinking(false);
+    setActivity(null);
     const detail = await fetchConversation(id);
     const thread = { id, kind: detail.kind, messages: detail.messages };
     activeRef.current = thread;
@@ -147,7 +171,9 @@ export function useMessages() {
   const startNew = useCallback(async (kind: "text" | "call" = "text") => {
     socketRef.current?.close();
     setStreaming("");
+    streamingRef.current = "";
     setThinking(false);
+    setActivity(null);
     const { conversation_id } = await startConversation(kind);
     const thread = { id: conversation_id, kind, messages: [] };
     activeRef.current = thread;
@@ -187,9 +213,27 @@ export function useMessages() {
     [],
   );
 
+  /** Re-sync the open thread from the server. Called when the socket drops and
+   *  reconnects, or when a reply that finished while we were away is done. A
+   *  reply still streaming on a live socket is left alone. */
+  const refreshActive = useCallback(async () => {
+    const thread = activeRef.current;
+    if (!thread || streamingRef.current) return;
+    try {
+      const detail = await fetchConversation(thread.id);
+      if (activeRef.current?.id !== thread.id) return;
+      const next = { id: thread.id, kind: detail.kind, messages: detail.messages };
+      activeRef.current = next;
+      setActive(next);
+    } catch {
+      // transient failure; the socket or a later event will resync
+    }
+  }, []);
+
   const connectSocket = useCallback((id: number) => {
     const socket = new MiraSocket(wsUrlFor(id), {
       onOpen: () => setConnected(true),
+      onReconnect: () => void refreshActive(),
       onClose: () => setConnected(false),
       onEvent: (event) => {
         switch (event.type) {
@@ -197,7 +241,15 @@ export function useMessages() {
             setThinking(event.state === "thinking");
             break;
           case "stream_token":
-            setStreaming((prev) => prev + event.content);
+            setStreaming((prev) => {
+              const next = prev + event.content;
+              streamingRef.current = next;
+              return next;
+            });
+            break;
+          case "activity":
+            setActivity(event.label);
+            setThinking(true);
             break;
           case "message":
             {
@@ -214,6 +266,8 @@ export function useMessages() {
                   : prev,
               );
               setStreaming("");
+              streamingRef.current = "";
+              setActivity(null);
               setThinking(false);
               if (event.speaker === "mira") {
                 notify(event.content);
@@ -232,12 +286,13 @@ export function useMessages() {
     });
     socket.connect();
     socketRef.current = socket;
-  }, [mergePending, speakReply]);
+  }, [mergePending, refreshActive, speakReply]);
 
   const send = useCallback(
     (content: string) => {
       const text = content.trim();
       if (!text || !active) return;
+      setActivity(null);
       const optimistic: Message = {
         id: Date.now(),
         speaker: "user",
@@ -278,32 +333,46 @@ export function useMessages() {
 
   const resolveChange = useCallback(
     async (id: number, approve: boolean) => {
+      setResolvingId(id);
+      setConsentError(null);
       try {
         if (approve) {
           await approveChange(id);
         } else {
           await denyChange(id);
         }
-      } catch {
+        setPendingChanges((prev) => prev.filter((c) => c.id !== id));
+        setCurrentRequest((cur) => (cur?.id === id ? null : cur));
+        void fetchChangeHistory().then(setChangeHistory).catch(() => undefined);
+      } catch (err) {
         // The change may already be resolved elsewhere (approved via the API
-        // or in another tab). Re-pull the pending list so the popup reflects
-        // the server's truth instead of retrying a stale request forever.
+        // or in another tab) — re-pull the pending list so the popup reflects
+        // the server's truth. If it is still genuinely pending, the request
+        // failed for a real reason: tell the user instead of leaving the
+        // button silently dead.
+        const act = approve ? "approve" : "deny";
+        const detail = err instanceof Error ? err.message : String(err);
         try {
           const fresh = await fetchPending();
           reconcilePending(fresh);
+          const still = fresh.find((c) => c.id === id)?.status;
+          if (still === "pending") {
+            setConsentError(`could not ${act}: ${detail}`);
+            setError(`could not ${act}: ${detail}`);
+          }
         } catch {
+          setConsentError(approve ? "could not approve request" : "could not deny request");
           setError(approve ? "could not approve request" : "could not deny request");
         }
-        return;
+      } finally {
+        setResolvingId(null);
       }
-      setPendingChanges((prev) => prev.filter((c) => c.id !== id));
-      setCurrentRequest((cur) => (cur?.id === id ? null : cur));
-      void fetchChangeHistory().then(setChangeHistory).catch(() => undefined);
     },
     [reconcilePending],
   );
 
   const dismissRequest = useCallback(() => {
+    setConsentError(null);
     setCurrentRequest((cur) => {
       const next = pendingChanges.find((c) => c.id !== cur?.id);
       return next ?? null;
@@ -334,7 +403,9 @@ export function useMessages() {
     activeRef.current = null;
     setActive(null);
     setStreaming("");
+    streamingRef.current = "";
     setThinking(false);
+    setActivity(null);
   }, []);
 
   const removeConversation = useCallback(
@@ -344,6 +415,7 @@ export function useMessages() {
         activeRef.current = null;
         setActive(null);
         setStreaming("");
+        streamingRef.current = "";
         setThinking(false);
       }
       try {
@@ -362,11 +434,14 @@ export function useMessages() {
     active,
     thinking,
     streaming,
+    activity,
     connected,
     error,
     pendingChanges,
     changeHistory,
     currentRequest,
+    resolvingId,
+    consentError,
     openConversation,
     startNew,
     focus,
@@ -374,6 +449,9 @@ export function useMessages() {
     removeConversation,
     send,
     sendImage,
+    refreshActive,
+    docs,
+    noteDocument,
     resolveChange,
     dismissRequest,
     injectSelf,

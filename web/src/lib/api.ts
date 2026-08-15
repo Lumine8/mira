@@ -1,11 +1,23 @@
 import type {
+  AuthConfig,
+  AuthSuccess,
+  AuthUser,
   ConversationDetail,
   ConversationSummary,
+  MagicLinkResponse,
   MiraMemory,
+  ModerationBanOut,
+  ModerationFlag,
+  ModerationUser,
   MoodRecord,
+  MotePresence,
+  MoteSharedTime,
   PendingChange,
   Question,
   StartConversationResponse,
+  WaitlistEntry,
+  WaitlistInviteOut,
+  WaitlistOut,
   Want,
 } from "./types";
 import { getAccessToken } from "./token";
@@ -17,11 +29,25 @@ function authHeaders(): Record<string, string> {
   return token ? { "X-Mira-Token": token } : {};
 }
 
+const UNAUTHORIZED_EVENT = "mira:unauthorized";
+
+function dispatchUnauthorized(): void {
+  window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Multipart bodies set their own Content-Type (with the boundary); forcing
+  // the JSON one would corrupt them.
+  const isForm = init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { ...(isForm ? {} : { "Content-Type": "application/json" }), ...authHeaders() },
     ...init,
   });
+  if (res.status === 401) {
+    // A missing/expired session anywhere drops the client back to sign-in.
+    dispatchUnauthorized();
+    throw new Error(`request failed: ${res.status}`);
+  }
   if (!res.ok) {
     throw new Error(`request failed: ${res.status} ${await res.text()}`);
   }
@@ -116,6 +142,338 @@ export function approveChange(id: number): Promise<PendingChange> {
 
 export function denyChange(id: number): Promise<PendingChange> {
   return request<PendingChange>(`/mira/tools/deny/${id}`, { method: "POST" });
+}
+
+// ── Skills ─────────────────────────────────────────────────────────────
+
+export interface SkillSummary {
+  id: string;
+  category: string;
+  version: string;
+  status: string;
+  purpose: string;
+  inputs: Record<string, unknown>[];
+  outputs: Record<string, unknown>[];
+  tools: string[];
+  verification: string[];
+  failure_modes: string[];
+  constraints: string[];
+  dependencies: string[];
+  run_count?: number;
+  last_edited?: string | null;
+}
+
+export interface SkillRunOut {
+  id: number;
+  version: string;
+  task: string;
+  status: string;
+  error: string | null;
+  output: string | null;
+  created_at: string;
+}
+
+export interface SkillEvaluationOut {
+  id: number;
+  run_id?: number;
+  version: string;
+  task: string;
+  scores: Record<string, unknown>;
+  evidence_count: number;
+  created_at: string;
+}
+
+export interface SkillDetail extends SkillSummary {
+  page: string;
+  recent_runs: SkillRunOut[];
+  recent_evaluations: SkillEvaluationOut[];
+}
+
+export interface SkillRunResult {
+  run: SkillRunOut;
+  evaluation: SkillEvaluationOut | null;
+}
+
+export function fetchSkills(): Promise<SkillSummary[]> {
+  return request<SkillSummary[]>("/mira/skills");
+}
+
+export function fetchSkill(skillId: string, includePage = true): Promise<SkillDetail> {
+  return request<SkillDetail>(
+    `/mira/skills/${encodeURIComponent(skillId)}?include_page=${includePage}`,
+  );
+}
+
+/** Record a run of a skill: what it was asked and what it produced. The tool
+ * runtime also does this automatically when one of a skill's tools fires. */
+export function recordSkillRun(
+  skillId: string,
+  body: { task: string; output?: string; status?: string; error?: string },
+): Promise<SkillRunResult> {
+  return request<SkillRunResult>(
+    `/mira/skills/${encodeURIComponent(skillId)}/runs`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+/** Re-measure a run against the skill's own checks, with any claims attached. */
+export function evaluateSkillRun(
+  skillId: string,
+  runId: number,
+  body: { names?: string[]; evidence?: Record<string, unknown>[] } = {},
+): Promise<SkillEvaluationOut> {
+  return request<SkillEvaluationOut>(
+    `/mira/skills/${encodeURIComponent(skillId)}/runs/${runId}/evaluate`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+// ── Skill versions (the self-improvement loop) ─────────────────────────
+
+export interface SkillVersionOut {
+  id: number;
+  skill_id: string;
+  category: string;
+  version: string;
+  kind: string; // edit | revert
+  path: string;
+  reason: string;
+  change_id: number | null;
+  created_at: string;
+  diff?: { tag: string; line: string }[];
+  after_content?: string;
+}
+
+export function fetchSkillVersions(
+  skillId: string,
+  category?: string,
+): Promise<SkillVersionOut[]> {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  return request<SkillVersionOut[]>(`/mira/skills/${encodeURIComponent(skillId)}/versions${q}`);
+}
+
+export function fetchSkillVersion(
+  skillId: string,
+  versionId: number,
+  category?: string,
+): Promise<SkillVersionOut> {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  return request<SkillVersionOut>(
+    `/mira/skills/${encodeURIComponent(skillId)}/versions/${versionId}${q}`,
+  );
+}
+
+export function revertSkillVersion(
+  skillId: string,
+  versionId: number,
+  category?: string,
+): Promise<SkillVersionOut> {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  return request<SkillVersionOut>(
+    `/mira/skills/${encodeURIComponent(skillId)}/versions/${versionId}/revert${q}`,
+    { method: "POST" },
+  );
+}
+
+// ── Documents ─────────────────────────────────────────────────────────
+
+export interface DocumentSummary {
+  name: string;
+  author: "founder" | "mira";
+  size: number;
+  preview: string;
+  modified_at: string;
+}
+
+export interface DocumentDetail extends DocumentSummary {
+  content: string;
+}
+
+export function fetchDocuments(): Promise<DocumentSummary[]> {
+  return request<DocumentSummary[]>("/mira/documents");
+}
+
+export function fetchDocument(name: string): Promise<DocumentDetail> {
+  return request<DocumentDetail>(`/mira/documents/${encodeURIComponent(name)}`);
+}
+
+export function createDocument(title: string, content: string): Promise<DocumentDetail> {
+  return request<DocumentDetail>("/mira/documents", {
+    method: "POST",
+    body: JSON.stringify({ title, content }),
+  });
+}
+
+export function createPdfDocument(file: File, title: string): Promise<DocumentDetail> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("title", title);
+  return request<DocumentDetail>("/mira/documents/pdf", { method: "POST", body: fd });
+}
+
+export function deleteDocument(name: string): Promise<{ name: string; deleted: boolean }> {
+  return request<{ name: string; deleted: boolean }>(
+    `/mira/documents/${encodeURIComponent(name)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────
+
+export function fetchAuthConfig(): Promise<AuthConfig> {
+  return request<AuthConfig>("/auth/config");
+}
+
+export function fetchMe(): Promise<AuthUser> {
+  return request<AuthUser>("/auth/me");
+}
+
+export interface MeWithLock {
+  identity: AuthUser | null;
+  banned: boolean;
+  bannedReason: string | null;
+}
+
+/** `/auth/me`, except a banned account resolves as a lock instead of a 403:
+ *  the seat is gone, and the frontend shows the closed door rather than a
+ *  generic error. */
+export async function fetchMeWithLock(): Promise<MeWithLock> {
+  const res = await fetch(`${BASE}/auth/me`, {
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+  });
+  if (res.ok) {
+    return { identity: (await res.json()) as AuthUser, banned: false, bannedReason: null };
+  }
+  if (res.status === 403) {
+    try {
+      const detail = (await res.json()) as { detail?: { banned?: boolean; reason?: string } };
+      if (detail.detail?.banned) {
+        return { identity: null, banned: true, bannedReason: detail.detail.reason ?? null };
+      }
+    } catch {
+      // not the structured lock; fall through to a normal error
+    }
+  }
+  throw new Error(`request failed: ${res.status} ${await res.text()}`);
+}
+
+export function requestMagicLink(email: string): Promise<MagicLinkResponse> {
+  return request<MagicLinkResponse>("/auth/magic-link", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyMagicLink(email: string, code: string): Promise<AuthSuccess> {
+  return request<AuthSuccess>("/auth/magic-link/verify", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+export async function googleAuthorizeUrl(): Promise<string> {
+  const res = await request<{ url: string }>("/auth/google/authorize");
+  return res.url;
+}
+
+export async function logout(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) return;
+  try {
+    await fetch(`${BASE}/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch {
+    // the local token is cleared regardless; the session will expire
+  }
+}
+
+// ── Waitlist ──────────────────────────────────────────────────────────
+
+export function waitlistSignup(email: string): Promise<WaitlistOut> {
+  return request<WaitlistOut>("/waitlist/signup", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function waitlistJoin(email: string, code: string): Promise<AuthSuccess> {
+  return request<AuthSuccess>("/waitlist/join", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+export function waitlistList(): Promise<WaitlistEntry[]> {
+  return request<WaitlistEntry[]>("/waitlist");
+}
+
+export function waitlistInvite(email: string): Promise<WaitlistInviteOut> {
+  return request<WaitlistInviteOut>("/waitlist/invite", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function waitlistDecline(entryId: number): Promise<WaitlistOut> {
+  return request<WaitlistOut>(`/waitlist/${entryId}/decline`, { method: "POST" });
+}
+
+export function waitlistForget(entryId: number): Promise<{ forgotten: boolean }> {
+  return request<{ forgotten: boolean }>(`/waitlist/${entryId}`, { method: "DELETE" });
+}
+
+// ── Moderation ────────────────────────────────────────────────────────
+
+export function fetchModerationFlags(status?: string): Promise<ModerationFlag[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<ModerationFlag[]>(`/moderation/flags${q}`);
+}
+
+export function banFromFlag(flagId: number, reason = ""): Promise<ModerationBanOut> {
+  return request<ModerationBanOut>(`/moderation/flags/${flagId}/ban`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function dismissFlag(flagId: number): Promise<ModerationFlag> {
+  return request<ModerationFlag>(`/moderation/flags/${flagId}/dismiss`, { method: "POST" });
+}
+
+export function fetchModerationUsers(): Promise<ModerationUser[]> {
+  return request<ModerationUser[]>("/moderation/users");
+}
+
+export function banUser(userId: number, reason = ""): Promise<ModerationBanOut> {
+  return request<ModerationBanOut>(`/moderation/users/${userId}/ban`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function unbanUser(userId: number): Promise<ModerationUser> {
+  return request<ModerationUser>(`/moderation/users/${userId}/unban`, { method: "POST" });
+}
+
+export function deleteUser(userId: number): Promise<{ user_id: number; deleted: boolean }> {
+  return request<{ user_id: number; deleted: boolean }>(`/moderation/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Mote ──────────────────────────────────────────────────────────────
+
+export function fetchMotePresence(): Promise<MotePresence> {
+  return request<MotePresence>("/mote");
+}
+
+export function fetchMoteJournal(): Promise<MoteSharedTime[]> {
+  return request<MoteSharedTime[]>("/mote/journal");
 }
 
 export function wsUrlFor(conversationId: number): string {
