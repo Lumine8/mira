@@ -175,4 +175,60 @@
       min-height: 48px;
     }
   }
+
+  // The meeting room on a phone: still full-screen, but the composer is
+  // keyboard-safe (16px text so iOS never zooms) and the voice control grows
+  // to a thumb-sized target. The chrome stays as thin as on desktop.
+  .meet {
+    &__bar {
+      padding: 14px 16px 6px;
+    }
+
+    &__room {
+      display: none;
+    }
+
+    &__stage {
+      padding: 16px;
+    }
+
+    &__orb {
+      width: min(24vh, 140px, 60vw);
+      height: min(24vh, 140px, 60vw);
+    }
+
+    &__title {
+      font-size: 24px;
+    }
+
+    &__scroll {
+      padding: 12px 18px 6px;
+      gap: 20px;
+    }
+
+    &__foot {
+      padding: 6px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    }
+
+    &__composer-input {
+      font-size: 16px;
+      min-height: 46px;
+    }
+
+    &__mic {
+      width: 48px;
+      height: 48px;
+    }
+
+    &__send {
+      min-width: 60px;
+      padding: 13px 18px;
+    }
+
+    &__enter {
+      width: 100%;
+      max-width: 320px;
+      padding: 15px 30px;
+    }
+  }
 }

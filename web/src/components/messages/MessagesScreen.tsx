@@ -16,6 +16,7 @@ export interface MessagesView {
   connected: boolean;
   error: string | null;
   docs: DocumentNote[];
+  creatingDocs: number[];
   onHome: () => void;
   openConversation: (id: number) => void;
   startNew: () => void;
@@ -110,7 +111,7 @@ function Sidebar({ view }: { view: MessagesView }) {
 }
 
 export default function MessagesScreen(view: MessagesView) {
-  const { conversations, active, thinking, streaming, activity, connected, error, docs } = view;
+  const { conversations, active, thinking, streaming, activity, connected, error, docs, creatingDocs } = view;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -163,6 +164,14 @@ export default function MessagesScreen(view: MessagesView) {
                 </div>
               )}
               {streaming && <div className="bubble bubble--mira bubble--streaming">{streaming}</div>}
+              {creatingDocs.includes(active.id) && (
+                <div className="chat__doc chat__doc--creating" role="status">
+                  <span className="chat__doc-spinner" aria-hidden="true" />
+                  <span className="chat__doc-text">
+                    Mira is writing this up as a <strong>paper</strong>…
+                  </span>
+                </div>
+              )}
               {docs
                 .filter((d) => d.conversationId === active.id)
                 .map((d) => (

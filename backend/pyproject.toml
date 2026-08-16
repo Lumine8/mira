@@ -36,6 +36,10 @@ dependencies = [
     "pypdf>=4",
     # FastAPI needs this for multipart uploads (the PDF drop).
     "python-multipart>=0.0.9",
+    # Downloading papers as Word / PDF: python-docx renders the markdown into a
+    # .docx, reportlab into a .pdf (with DejaVu/Vera fonts for unicode).
+    "python-docx>=1.1",
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]

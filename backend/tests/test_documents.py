@@ -219,3 +219,47 @@ def test_create_from_pdf_refuses_garbage_and_blank(env) -> None:
         svc.create_from_pdf("t", "f.pdf", b"this is not a pdf at all")
     with pytest.raises(DocumentError):
         svc.create_from_pdf("t", "blank.pdf", _minimal_pdf(""))
+
+
+def test_download_markdown_serves_the_paper(env) -> None:
+    from app.api.routes.documents import download_document
+
+    db, root = env
+    user_id = _founder_id(db)
+    svc = DocumentService(db, user_id=user_id)
+    svc.create("A letter to Mira", "Dear Mira,\n\nI found something.")
+    resp = download_document("a-letter-to-mira", "md", db, user_id)
+    assert resp.status_code == 200
+    assert resp.body.decode("utf-8") == "Dear Mira,\n\nI found something."
+    assert 'attachment; filename="a-letter-to-mira.md"' in resp.headers["content-disposition"]
+
+
+def test_download_docx_and_pdf_render(env) -> None:
+    from app.api.routes.documents import download_document
+
+    db, root = env
+    user_id = _founder_id(db)
+    svc = DocumentService(db, user_id=user_id)
+    svc.create("The Bull Market", "# The Bull Market\n\nA **rise** in prices.")
+
+    word = download_document("the-bull-market", "docx", db, user_id)
+    assert word.status_code == 200
+    assert word.body.startswith(b"PK")
+    assert 'attachment; filename="the-bull-market.docx"' in word.headers["content-disposition"]
+
+    pdf = download_document("the-bull-market", "pdf", db, user_id)
+    assert pdf.status_code == 200
+    assert pdf.body.startswith(b"%PDF")
+    assert 'attachment; filename="the-bull-market.pdf"' in pdf.headers["content-disposition"]
+
+
+def test_download_unknown_document_404(env) -> None:
+    from fastapi import HTTPException
+
+    from app.api.routes.documents import download_document
+
+    db, root = env
+    user_id = _founder_id(db)
+    with pytest.raises(HTTPException) as exc:
+        download_document("does-not-exist", "md", db, user_id)
+    assert exc.value.status_code == 404

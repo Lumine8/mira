@@ -110,9 +110,15 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_llm_model: str = "gemma4:e4b-it-qat"
     ollama_embed_model: str = "nomic-embed-text"
-    # gemma4's vision projector crashes llama.cpp when layers are split across
-    # GPU + CPU on low-VRAM cards; run it fully on CPU until that bug is fixed.
-    ollama_num_gpu: int = 0
+    # Layers to offload to the GPU (0 = CPU only). Measured on the RTX 3050
+    # 4GB card: mid-range splits (e.g. 16) still crash llama.cpp's scheduler
+    # ("GGML_ASSERT(n_inputs < GGML_SCHED_MAX_SPLIT_I)"), but full offload and
+    # CPU-only are both stable — so default to everything rather than partial.
+    ollama_num_gpu: int = 42
+    # Context window for each request. gemma4's default 128K is mostly wasted
+    # memory on a 4GB card; a bounded window leaves VRAM headroom for the GPU
+    # offload above.
+    ollama_num_ctx: int = 32768
     # gemma4 emits a `thinking` phase that counts against num_predict; the
     # budget must leave room for the actual reply or content comes back empty.
     ollama_max_tokens: int = 2048
@@ -155,10 +161,24 @@ class Settings(BaseSettings):
     # one. If set (comma-separated), only these domains may be proposed at all.
     mira_browse_allowed_domains: str = ""
 
+    # Reading a page is read-only: it changes nothing and is still fully
+    # recorded. So by default she browses on her own — especially while doing
+    # research — without an approval popup. Set to false to put the consent
+    # wall back.
+    mira_browse_autonomous: bool = True
+
+    # Backup readers: when a site refuses a direct fetch (403 bot-wall, JS
+    # challenge), her reading falls back to a text-extraction proxy and the
+    # Wayback Machine. A free Jina Reader API key (from jina.ai) lifts the
+    # anonymous rate limit and the shared-IP abuse block; without it the proxy
+    # still works, just throttled.
+    mira_reader_api_key: str = ""
+
     # Time-boxed open browsing: an ISO-8601 timestamp (e.g. 2026-08-03T21:40:00Z).
     # Until it passes, Mira's browse requests skip the domain allowlist and are
     # auto-approved (still fully recorded in pending_changes). Once it passes,
-    # the normal wall is back. "" = never open.
+    # the normal wall is back. "" = never open. Superseded by
+    # mira_browse_autonomous, which keeps browsing open permanently.
     mira_browse_open_window: str = ""
 
     @property

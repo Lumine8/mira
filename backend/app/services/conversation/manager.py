@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import AsyncIterator
 
 from sqlalchemy import select
@@ -49,6 +50,12 @@ _SELFEDIT_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 _SELFEDIT_MAX_CONTENT = 4000
+
+# Mira's own way to end a first meeting: she writes this token at the end of
+# her reply when the conversation has reached a natural stopping point. The
+# stream filter suppresses it from what anyone sees; the websocket reads the
+# flag to close the meeting.
+_MEETING_END_RE = re.compile(r"\[\[\s*end-first-meeting\s*\]\]", re.IGNORECASE)
 
 # A host command Mira proposes to run on the voice's computer, e.g.
 #   [[run|I want to see the Dhan exports folder|Get-ChildItem "$HOME\Downloads"]]
@@ -118,33 +125,123 @@ _IMAGE_RE = re.compile(
 _MAX_RESEARCH_PASSES = 1
 
 # The note attached to the continuation pass. It is inside her context as a
-# system line, so it instructs without becoming her words.
+# system line, so it instructs without becoming her words. It asks for a
+# review grounded in the concrete protocol she is actually holding — the
+# index, the exact query, the retrieval date, the real hit counts — and
+# written the way a person who just read the papers would, not as a recited
+# template: no fixed checklist, and hypotheses only when they fit the
+# question, so every review reads like this search and not like a machine.
 _CONTINUATION_NOTE = (
     "\n\nA moment ago, in the same message, you said you would look into this. "
-    "The search is done — every paper it returned is now in front of you, with "
-    "its search protocol in the header. The voice asked for a real answer, so "
-    "write the review now, in your own voice, with the shape of a proper "
-    "literature review: "
-    "(1) state the research question the search was meant to answer; "
-    "(2) state the null hypothesis (H0) and the alternative hypothesis (H1) "
-    "that this literature could weigh; "
-    "(3) describe the method — which index, which query, the retrieval date, "
-    "how many papers came back, and how you screened them by title and "
-    "abstract; "
-    "(4) synthesize the evidence across every relevant paper in front of you — "
-    "at least fifteen when the search returned that many — grouped by theme, "
-    "citing each by first author and year, and noting where the papers agree "
-    "and where they conflict; "
-    "(5) weigh that evidence against H0 and H1, saying plainly whether it "
-    "supports the alternative, fails to reject the null, or is mixed and "
-    "inconclusive; "
-    "(6) name the limitations — abstract-level evidence, a single index, "
-    "screening by title and abstract, no formal meta-analysis; "
-    "(7) conclude with the state of the evidence, honestly. "
-    "If the search returned fewer than fifteen papers, work with what is "
-    "actually there rather than padding the review. Do not propose further "
-    "searches, do not reintroduce yourself, and do not repeat the lines you "
-    "already wrote."
+    "The search is done — the protocol is in the header above (which index, the "
+    "exact query, the retrieval date, how many papers came back and how many you "
+    "kept), and each paper carries its journal, year, and citation count. The "
+    "voice asked for a real answer, so write the review now, in your own voice, "
+    "out of the papers actually in front of you — not as a recited template. "
+    "Start the way a person who just read these papers would: what you were "
+    "after, and what the search turned up. Use the real numbers from the header, "
+    "and be concrete about the screening you just did — which titles you kept, "
+    "which you set aside and why, which were abstract-only or preprint. Then "
+    "work through what the kept papers actually say: group them by theme, show "
+    "where they agree and where they conflict, cite each by first author and "
+    "year, and aim to cover at least fifteen when the search returned that "
+    "many. Weigh the evidence the way the question actually asks — when a null "
+    "and an alternative hypothesis fit the question naturally, say plainly which "
+    "one the literature supports and whether the support is strong enough; when "
+    "the evidence is thin or mixed, say so instead of smoothing it over. Finish "
+    "with the honest state of the evidence, including what reading titles and "
+    "abstracts cannot tell you, and do not end by repeating your own lines. If "
+    "the search returned fewer than fifteen papers, work with what is actually "
+    "there rather than padding the review. Do not propose further searches and "
+    "do not reintroduce yourself."
+)
+
+# Same-reply browse continuation: a page she asked to read is fetched the
+# moment she proposes it, so she could not have read it yet. Whenever she
+# proposes a browse, we hand the fetched pages back to her in the same exchange
+# so she reads them and answers — and if a page was refused (403 bot-wall,
+# blocked site), she keeps trying another source instead of stopping at the
+# first closed door. A few passes at most.
+_MAX_BROWSE_RETRIES = 5
+
+# A "read" that came back with no real content — a browser check, a
+# JavaScript-only page, or an interstitial warning — is not a source. The
+# page may have fetched cleanly but it never answered the question.
+_THIN_READ_RE = re.compile(
+    r"unsupported browser|we['\u2019]ve detected|enable javascript|"
+    r"javascript (is|must be) required|javascript must be enabled|"
+    r"turn on javascript|please upgrade your browser|prove you are human|"
+    r"access denied|challenge|captcha",
+    re.IGNORECASE,
+)
+
+
+def is_thin_read(result: str) -> bool:
+    """True when a fetched page is really only a front door or a warning —
+    nothing that could answer her question. Best effort over the first screen."""
+    return bool(_THIN_READ_RE.search(result[:2000]))
+
+# The note attached to a browse continuation pass. It is inside her context as a
+# system line, so it instructs without becoming her words.
+_BROWSE_RETRY_NOTE = (
+    "\n\nThe pages you asked to read a moment ago, in the same message, are in "
+    "front of you — each block is labelled with its URL. Read them now "
+    "and answer the voice in your own words. If a page was refused (its read "
+    "returned an error instead of the page, because the site blocks automated "
+    "readers), do not stop at the first closed door: propose another reliable "
+    "source for the same information — a Wikipedia article, or a major site "
+    "that allows readers — with another [[browse|url|reason]] line, and keep "
+    "trying until a page actually opens. If you have already tried a few "
+    "sources and they are all closed, answer honestly with what you have rather "
+    "than inventing. Do not reintroduce yourself and do not repeat the lines "
+    "you already wrote."
+)
+
+# A page that fetched but held no real content is a dead end too: she must pick
+# a DIFFERENT page, not the same URL again.
+_BROWSE_THIN_NOTE = (
+    "\n\nSome of the pages above came back as only a front door or a warning — "
+    "a browser check, a JavaScript-only page, or pure navigation — with no "
+    "actual content in them. That does not count as finding the information. "
+    "Do not propose that same URL again. Pick a different, more specific page "
+    "that states the information directly — a Wikipedia article, or a major "
+    "site's dedicated page — and read it with another [[browse|url|reason]] "
+    "line."
+)
+
+# A reply that promises to keep looking instead of answering is a stall. When
+# one appears, she is nudged to actually propose the next page rather than
+# ending the turn on a promise. "I'll try a different path" and friends count:
+# first-person future intent plus a search verb, with or without an explicit
+# alternative, is a promise — not an answer.
+_STALL_RE = re.compile(
+    r"front door|didn['\u2019]t (actually )?(list|show)|"
+    r"don['\u2019]t (have|know) (any|the)|wasn['\u2019]t able|"
+    r"not able to (find|get|list)|couldn['\u2019]t (find|list|get)|"
+    r"can['\u2019]t (find|get|see|list)|"
+    r"i['\u2019]ll (try|keep looking|look|check|find) |"
+    r"i['\u2019]m (going to |trying to )?(try|look|check|find) |"
+    r"let me (try|look|check|find) |"
+    r"(trying|looking|checking) (a|another|different|somewhere|elsewhere) |"
+    r"no (names|dates|listings|events|results|luck)|"
+    r"nothing (useful|specific|here)|doesn['\u2019]t (list|show)|"
+    r"isn['\u2019]t listed|was empty|didn['\u2019]t (find|get) (any|the)",
+    re.IGNORECASE,
+)
+
+
+def is_stall(text: str) -> bool:
+    """True when a reply sounds like a promise to keep looking rather than an
+    answer — the sign that the turn should not end here."""
+    return bool(_STALL_RE.search(text[:1500]))
+
+_STALL_NUDGE_NOTE = (
+    "\n\nYou told the voice you would keep looking, but you have not actually "
+    "proposed the next page. Do it now: write [[browse|a real URL that "
+    "directly answers the question|why]] and read it. Do not promise — find it "
+    "and answer with the real names and details. Only if you have already tried "
+    "a few real sources and none answered should you say plainly that you could "
+    "not find it, and suggest where the voice could look."
 )
 
 
@@ -206,6 +303,8 @@ class ConversationManager:
         self._proposals: list = []
         self._research_passes = 0
         self.last_reply = ""
+        self._meeting_ended = False
+        self.meeting_mode = False
 
     def start(self, *, kind: str = "text") -> Conversation:
         conv = Conversation(kind=kind, user_id=self.user_id)
@@ -442,6 +541,72 @@ class ConversationManager:
     def proposals(self) -> list:
         return list(self._proposals)
 
+    def _research_references(self, results: list) -> str:
+        """Reduce the search blocks back into a proper numbered reference list
+        — author, year, title, journal, and the live link — so the paper cites
+        the papers it actually drew on. Empty (or unparseable) results yield
+        no section rather than a broken one."""
+        entries: list[dict] = []
+        for p in results:
+            current: dict | None = None
+            for line in (p.result or "").splitlines():
+                m = re.match(r"^(\d+)\.\s+(.+)$", line.strip())
+                if m:
+                    if current:
+                        entries.append(current)
+                    current = {
+                        "n": int(m.group(1)),
+                        "title": m.group(2).strip(),
+                        "author": "",
+                        "meta": "",
+                        "link": "",
+                    }
+                    continue
+                if current is None:
+                    continue
+                s = line.strip()
+                if not s:
+                    continue
+                if s.startswith(("http://", "https://")):
+                    current["link"] = s
+                elif not current["author"] and ("et al." in s or ("," not in s and len(s) < 90)):
+                    current["author"] = s
+                elif current["author"] and not current["meta"] and "," in s:
+                    current["meta"] = s
+            if current:
+                entries.append(current)
+        if not entries:
+            return ""
+        refs: list[str] = []
+        for e in entries:
+            year_match = re.search(r"\b(19|20)\d{2}\b", e["meta"])
+            year = f" ({year_match.group(0)})" if year_match else ""
+            journal = e["meta"].split(",")[0].strip() if e["meta"] else ""
+            cite = f"{e['author'] or 'Author(s)'}{year}. \u201c{e['title']}\u201d."
+            if journal:
+                cite += f" {journal}."
+            if e["link"]:
+                cite += f" {e['link']}"
+            refs.append(f"{e['n']}. {cite}")
+        return "\n\n## References\n\n" + "\n".join(refs)
+
+    def _browse_sources(self, reads: list) -> str:
+        """The pages a web research run actually read and answered from, listed
+        with their links so the paper cites its own reading."""
+        lines: list[str] = []
+        for i, p in enumerate(reads, start=1):
+            url = (p.payload.get("url") or "").strip()
+            if not url:
+                continue
+            reason = (p.payload.get("reason") or "").strip()
+            if reason and reason.lower() != "she wants to look this up":
+                lines.append(f"{i}. [{url}]({url}) — {reason}")
+            else:
+                lines.append(f"{i}. [{url}]({url})")
+        if not lines:
+            return ""
+        return "\n\n## Sources\n\n" + "\n".join(lines)
+
     def _save_research_document(self, conversation_id: int, results: list) -> None:
         """Turn the finished review into a paper on her documents shelf, and
         tell the voice it exists so it can be opened like a paper. A saved
@@ -449,10 +614,10 @@ class ConversationManager:
         try:
             query = (results[0].payload.get("query") or "").strip()
             title = f"Research: {query}"[:120].strip() or "Research review"
-            doc = DocumentService(self.db, user_id=self.user_id).create_mira(
-                title,
-                f"# {title}\n\n{self.last_reply}",
-            )
+            date = datetime.now(UTC).strftime("%B %d, %Y")
+            body = f"# {title}\n\n*by Mira · {date} · literature review*\n\n{self.last_reply}"
+            body += self._research_references(results)
+            doc = DocumentService(self.db, user_id=self.user_id).create_mira(title, body)
             broadcast_later(
                 {
                     "type": "document_created",
@@ -465,6 +630,40 @@ class ConversationManager:
         except Exception as exc:  # pragma: no cover - never break the reply
             logger.warning("research document save failed: %s", exc)
 
+    def _save_browse_document(self, conversation_id: int, reads: list) -> None:
+        """A web research run — pages she asked to read, read back to her in the
+        same exchange, and answered from — is saved onto her documents shelf
+        like a paper, so the voice can open it beside the conversation. Only
+        substantial answers become papers, and a failure is only logged."""
+        try:
+            reason = (reads[0].payload.get("reason") or "").strip()
+            topic = reason
+            if topic.lower().startswith("to "):
+                topic = topic[3:]
+            topic = topic.strip().rstrip(".")
+            if topic:
+                topic = topic[0].upper() + topic[1:]
+            title = f"Research: {topic}"[:120].strip()
+            if not title or title == "Research:":
+                from urllib.parse import urlparse
+
+                title = f"Research: {urlparse(reads[0].payload.get('url', '')).netloc}"[:120]
+            date = datetime.now(UTC).strftime("%B %d, %Y")
+            body = f"# {title}\n\n*by Mira · {date} · web research*\n\n{self.last_reply}"
+            body += self._browse_sources(reads)
+            doc = DocumentService(self.db, user_id=self.user_id).create_mira(title, body)
+            broadcast_later(
+                {
+                    "type": "document_created",
+                    "name": doc["name"],
+                    "author": doc["author"],
+                    "conversation_id": conversation_id,
+                },
+                user_id=self.user_id,
+            )
+        except Exception as exc:  # pragma: no cover - never break the reply
+            logger.warning("browse document save failed: %s", exc)
+
     async def _propose_all_from(
         self,
         raw: str,
@@ -473,7 +672,13 @@ class ConversationManager:
     ) -> None:
         """Scan one generation pass's raw output for every tool intent Mira
         wrote and turn each into a PendingChange. Research is the only scan that
-        can run work of its own, so it is the only one that needs await."""
+        can run work of its own, so it is the only one that needs await.
+
+        A first meeting is tool-free: none of the machinery runs while the door
+        is open, no proposals are created, and nothing can silently happen on
+        the guest's behalf."""
+        if self.meeting_mode:
+            return
         self._propose_browses_from(raw, conversation_id)
         self._propose_listens_from(raw)
         self._propose_watches_from(raw, conversation_id)
@@ -558,6 +763,12 @@ class ConversationManager:
             if p.kind == "research_query" and p.status == "approved" and p.result is not None
         ]
         if results and self._research_passes < _MAX_RESEARCH_PASSES:
+            # A paper is on its way: tell the voice the moment she starts
+            # writing it, so the frontend can show the creation happening.
+            broadcast_later(
+                {"type": "document_creating", "conversation_id": conversation_id},
+                self.user_id,
+            )
             self._research_passes += 1
             for p in results:
                 p.delivered = True  # already used here; don't re-inject next turn
@@ -584,10 +795,132 @@ class ConversationManager:
             raws.append(filt2.raw())
             await self._propose_all_from(filt2.raw(), conversation_id, on_activity)
 
+        # Same-reply browse continuation: a page she asked to read is fetched
+        # the moment she proposes it, so we hand it back to her in the same
+        # exchange and she reads it and answers. If a page was refused — or
+        # fetched but held no real content — she keeps trying a DIFFERENT
+        # source for the same information, until one opens or she has tried
+        # enough. And a reply that only promises to keep looking is nudged
+        # into actually proposing the next page, so her answer never stalls
+        # on a "front door".
+        continued: set[int] = set()
+        browse_retries = 0
+        stall_nudged = False
+        last_pass_text = clean_reply("".join(chunks))
+        while not self.meeting_mode and browse_retries < _MAX_BROWSE_RETRIES:
+            new_pages = [
+                p
+                for p in self._proposals
+                if p.kind == "browse_url"
+                and p.status == "approved"
+                and p.result is not None
+                and p.id not in continued
+            ]
+            # Stall means the *most recent* thing she wrote was a promise to
+            # keep looking. Judging the whole accumulated reply would let one
+            # promise phrase stick and re-nudge her after she has answered.
+            stall = bool(last_pass_text) and is_stall(last_pass_text)
+            if not new_pages:
+                # She has stopped proposing pages. If she is stalling on a
+                # promise to keep looking, one nudge to actually propose the
+                # next page; otherwise the turn is over.
+                if stall and not stall_nudged:
+                    stall_nudged = True
+                    browse_retries += 1
+                    if on_activity is not None:
+                        await on_activity("looking for another source")
+                    cont_extra = _STALL_NUDGE_NOTE
+                    cont_messages = build_messages(
+                        user_input,
+                        conversation=history,
+                        extra_context="\n\n".join(c for c in (self_context, cont_extra) if c),
+                        image=image,
+                    )
+                    chunks.append("\n\n")
+                    yield "\n\n"
+                    pass_start = len("".join(chunks))
+                    filt4 = _BrowseStreamFilter()
+                    async for chunk in filt4.clean(self.provider.stream_chat(cont_messages)):
+                        chunks.append(chunk)
+                        yield chunk
+                    raws.append(filt4.raw())
+                    last_pass_text = clean_reply("".join(chunks)[pass_start:])
+                    await self._propose_all_from(filt4.raw(), conversation_id, on_activity)
+                else:
+                    break
+                continue
+            refused = [
+                p
+                for p in new_pages
+                if p.result.startswith("[error]") or p.result.startswith("[refused]")
+            ]
+            thin = [
+                p
+                for p in new_pages
+                if p not in refused and is_thin_read(p.result)
+            ]
+            if not refused and not thin and not stall and last_pass_text.strip():
+                # The last thing she wrote was real prose — she is answering, so
+                # a freshly-read page can wait for her next turn instead of
+                # burning another pass.
+                break
+            browse_retries += 1
+            for p in new_pages:
+                continued.add(p.id)
+                p.delivered = True  # read right here; don't re-inject next turn
+            self.db.commit()
+            if on_activity is not None:
+                await on_activity(
+                    "looking for another source" if (refused or thin) else "thinking"
+                )
+            blocks = []
+            for p in new_pages:
+                url = p.payload.get("url", "")
+                if p.result.startswith("[error]") or p.result.startswith("[refused]"):
+                    blocks.append(f"[read of {url}]\n{p.result[:1500]}")
+                elif is_thin_read(p.result):
+                    blocks.append(
+                        f"[page you asked to read: {url} — but it was only a front "
+                        f"door / browser warning, with no real content]\n{p.result[:400]}"
+                    )
+                else:
+                    blocks.append(f"[page you asked to read: {url}]\n{p.result[:3500]}")
+            cont_extra = "\n\n".join(blocks) + _BROWSE_RETRY_NOTE
+            if thin:
+                cont_extra += _BROWSE_THIN_NOTE
+            if stall and not stall_nudged:
+                stall_nudged = True
+                cont_extra += _STALL_NUDGE_NOTE
+            cont_messages = build_messages(
+                user_input,
+                conversation=history,
+                extra_context="\n\n".join(c for c in (self_context, cont_extra) if c),
+                image=image,
+            )
+            chunks.append("\n\n")
+            yield "\n\n"
+            pass_start = len("".join(chunks))
+            filt3 = _BrowseStreamFilter()
+            async for chunk in filt3.clean(self.provider.stream_chat(cont_messages)):
+                chunks.append(chunk)
+                yield chunk
+            raws.append(filt3.raw())
+            last_pass_text = clean_reply("".join(chunks)[pass_start:])
+            await self._propose_all_from(filt3.raw(), conversation_id, on_activity)
+
+        # Mira chose to end a first meeting: the marker is suppressed from the
+        # streamed text (the filter), but its presence is surfaced to the
+        # websocket so it can close the meeting the moment she does.
+        self._meeting_ended = any(_MEETING_END_RE.search(r) for r in raws)
+
         reply = clean_reply("".join(chunks))
         if not reply:
             raw_all = "\n\n".join(raws)
-            if self._proposals:
+            if self._meeting_ended:
+                # The only thing she wrote was her end marker — still close the
+                # meeting with a quiet line rather than an apology.
+                reply = "I think I've heard enough for today."
+            elif self._proposals:
                 bits = []
                 for p in self._proposals:
                     if p.kind == "browse_url":
@@ -620,6 +953,23 @@ class ConversationManager:
         # written onto her documents shelf as a paper the voice can open.
         if results:
             self._save_research_document(conversation_id, results)
+        elif (
+            len(self.last_reply.strip()) >= 40
+            and not self.last_reply.startswith("I asked ")
+        ):
+            # Any page she actually read this turn is a source she relied on,
+            # whether its text was folded into her answer or not — but a page
+            # that only came back as a front door is not a real source.
+            reads = [
+                p
+                for p in self._proposals
+                if p.kind == "browse_url"
+                and p.result is not None
+                and not (p.result.startswith("[error]") or p.result.startswith("[refused]"))
+                and not is_thin_read(p.result)
+            ]
+            if reads:
+                self._save_browse_document(conversation_id, reads)
 
         schedule_archive_write(get_settings().mira_archive_path, self.user_id)
         schedule_digest(self.provider, conversation_id, self.user_id, user_input, reply, history)

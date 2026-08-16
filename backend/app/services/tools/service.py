@@ -17,6 +17,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import UTC, datetime
 from io import BytesIO
 from urllib.parse import quote, urlparse
@@ -43,6 +45,17 @@ _MAX_SEARCH_FILES = 60
 _MAX_BROWSE_BYTES = 200_000
 _MAX_BROWSE_TEXT = 6_000
 _BROWSE_TIMEOUT = 20
+# A single page read is bounded by a hard wall-clock deadline (the direct fetch
+# plus any backup readers). Without it, one slow or hanging site can hold up the
+# whole reply and land its content after the turn has already committed — which
+# is how a fetched page ends up delivered=False with no follow-up message.
+_BROWSE_FETCH_DEADLINE = 12.0
+# A plain browser-looking agent keeps even guarded sites (which refuse "Mira/1.0"
+# bot clients with a 403) willing to hand over their pages.
+_BROWSE_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
 _MAX_LYRICS_CHARS = 4_000
 _MAX_WIKI_CHARS = 1_200
 _LISTEN_TIMEOUT = 20
@@ -204,7 +217,9 @@ class ToolService:
                 raise ToolError(f"invalid url: {url!r}")
             if self._is_money_netloc(parsed.netloc):
                 raise ToolError(f"that domain is off-limits: {parsed.netloc}")
-            if not get_settings().browse_window_open:
+            if not get_settings().browse_window_open and not getattr(
+                get_settings(), "mira_browse_autonomous", False
+            ):
                 allowed = [d.strip().lower() for d in get_settings().mira_browse_allowed_domains.split(",") if d.strip()]
                 if allowed and parsed.netloc.lower() not in allowed:
                     raise ToolError(
@@ -291,9 +306,14 @@ class ToolService:
                 user_id=self.user_id,
             )
 
-        if kind == "browse_url" and get_settings().browse_window_open:
-            # An open window: she may see whatever she asks for, without a stop.
-            # The fetch and approval are still fully recorded in pending_changes.
+        if kind == "browse_url" and (
+            get_settings().browse_window_open
+            or getattr(get_settings(), "mira_browse_autonomous", False)
+        ):
+            # An open window — or browsing left on by default: she may see
+            # whatever she asks for, without a stop. Reading changes nothing,
+            # and the fetch and approval are still fully recorded in
+            # pending_changes.
             change.result = self._fetch_browse(payload.get("url", ""))
             change.status = "approved"
             change.resolved_at = datetime.now(UTC)
@@ -308,6 +328,7 @@ class ToolService:
             # inside the skill registry, which is where capabilities grow. Both
             # are still fully recorded in pending_changes.
             self._apply_write(payload, change=change)
+            self._broadcast_document_if_written(payload.get("path", ""))
             change.status = "approved"
             change.resolved_at = datetime.now(UTC)
             self.db.commit()
@@ -436,6 +457,7 @@ class ToolService:
         if change.kind == "write_file":
             self._apply_write(change.payload, change=change)
             change.result = None
+            self._broadcast_document_if_written(change.payload.get("path", ""))
         elif change.kind == "browse_url":
             change.result = self._fetch_browse(change.payload.get("url", ""))
         elif change.kind == "research_query":
@@ -540,6 +562,30 @@ class ToolService:
         self._record_skill_version_if_in_registry(
             target, before=before, after=content, change=change
         )
+
+    def _broadcast_document_if_written(self, path: str) -> None:
+        """When an approved write lands a paper into her documents folder, tell
+        the world so the shelf and the paper popup wake up. Best effort — a
+        broadcast never breaks the write itself."""
+        try:
+            target = self._resolve_write(path)
+            norm = os.path.normpath(target).replace(os.sep, "/")
+            if "/documents/mira/" not in norm or not norm.endswith(".md"):
+                return
+            name = os.path.basename(norm)[:-3]
+            if not name:
+                return
+            broadcast_later(
+                {
+                    "type": "document_created",
+                    "name": name,
+                    "author": "mira",
+                    "conversation_id": 0,
+                },
+                user_id=self.user_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - never break the approved write
+            logger.warning("document broadcast skipped (%s): %s", path, exc)
 
     def _record_skill_version_if_in_registry(
         self, target: str, *, before: str | None, after: str, change: PendingChange | None
@@ -851,43 +897,73 @@ class ToolService:
     # -- gated browsing ----------------------------------------------------
 
     def _fetch_browse(self, url: str) -> str:
-        """Fetch a URL the user approved and reduce it to readable text.
+        """Fetch a URL and reduce it to readable text.
 
         Wikipedia is handled specially: scraping its HTML yields thousands of
         characters of navigation boilerplate (tables of contents, language
         links) before any real content. The REST API extract returns the clean
         lead section, which is what she actually wants to read.
+
+        A page that refuses a direct fetch (403 bot-wall, JS challenge) falls
+        back to the backup reader, so she can still read what it says.
+
+        The whole read — direct fetch and backup readers alike — is bounded by
+        a hard wall-clock deadline, so one slow page can never hold up the
+        reply while its content lands after the turn has already committed.
         """
         parsed = urlparse(url)
         if parsed.netloc.lower().endswith("wikipedia.org"):
             clean = self._fetch_wikipedia_page(url)
             if clean:
                 return clean
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mira-browse")
+        try:
+            return executor.submit(self._fetch_browse_inner, url).result(
+                timeout=_BROWSE_FETCH_DEADLINE
+            )
+        except FuturesTimeoutError:
+            logger.warning(
+                "browse fetch exceeded %.0fs deadline: %s", _BROWSE_FETCH_DEADLINE, url
+            )
+            return (
+                f"[error] timed out reading {url} after {_BROWSE_FETCH_DEADLINE:.0f}s"
+            )
+        finally:
+            # Never wait for an abandoned worker to finish; the reply must move on.
+            executor.shutdown(wait=False)
 
+    def _fetch_browse_inner(self, url: str) -> str:
+        """The actual page read, run on a worker thread under the deadline."""
+        refused: str | None = None
         try:
             with httpx.Client(
                 timeout=_BROWSE_TIMEOUT,
                 follow_redirects=True,
-                headers={"User-Agent": "Mira/1.0 (private companion)"},
+                headers={"User-Agent": _BROWSE_UA, "Accept-Language": "en-US,en;q=0.9"},
             ) as client, client.stream("GET", url) as resp:
                 resp.raise_for_status()
                 ctype = resp.headers.get("content-type", "")
                 if "html" not in ctype and "text" not in ctype and "json" not in ctype:
-                    return f"[refused] content-type not readable: {ctype}"
-                buf: list[str] = []
-                total = 0
-                for chunk in resp.iter_bytes(16_384):
-                    total += len(chunk)
-                    if total > _MAX_BROWSE_BYTES:
-                        buf.append("\n[truncated]")
-                        break
-                    buf.append(chunk.decode("utf-8", errors="replace"))
+                    refused = f"[refused] content-type not readable: {ctype}"
+                else:
+                    buf: list[str] = []
+                    total = 0
+                    for chunk in resp.iter_bytes(16_384):
+                        total += len(chunk)
+                        if total > _MAX_BROWSE_BYTES:
+                            buf.append("\n[truncated]")
+                            break
+                        buf.append(chunk.decode("utf-8", errors="replace"))
         except httpx.HTTPStatusError as exc:
-            return f"[error] {exc.response.status_code} for {url}"
+            refused = f"[error] {exc.response.status_code} for {url}"
         except Exception as exc:
-            return f"[error] could not reach {url}: {exc}"
+            refused = f"[error] could not reach {url}: {exc}"
 
-        text = _html_to_text("".join(buf))
+        if refused is not None:
+            backup = _backup_text(url)
+            return backup or refused
+
+        text = _page_to_text("".join(buf))
         if len(text) > _MAX_BROWSE_TEXT:
             text = text[:_MAX_BROWSE_TEXT] + "\n… (truncated)"
         return text or "[empty page]"
@@ -907,7 +983,7 @@ class ToolService:
             resp = httpx.get(
                 f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title)}",
                 timeout=_BROWSE_TIMEOUT,
-                headers={"User-Agent": "Mira/1.0 (private companion)"},
+                headers={"User-Agent": _BROWSE_UA},
                 follow_redirects=True,
             )
             if resp.status_code != 200:
@@ -1132,3 +1208,130 @@ def _html_to_text(raw: str) -> str:
     raw = _TAG_RE.sub(" ", raw)
     raw = _OTHER_TAG_RE.sub(" ", raw)
     return _WS_RE.sub(" ", html.unescape(raw)).strip()
+
+
+# Navigation chrome (headers, sidebars, footers) crowds out the writing on most
+# sites, so before reading we keep only the main/article region when the page
+# has one. Modern sites nearly all do.
+_MAIN_RE = re.compile(r"<(main|article)\b[^>]*>(.*?)</(main|article)>", re.IGNORECASE | re.DOTALL)
+
+
+def _page_to_text(body: str) -> str:
+    main = _MAIN_RE.search(body)
+    if main:
+        return _html_to_text(main.group(2))
+    return _html_to_text(body)
+
+
+# A pure-navigation line: a markdown link on its own (possibly a list item).
+_NAV_LINE_RE = re.compile(r"^[\s>*\-\d\.]*\[[^\]\n]+\]\([^)\n]+\)[\s>]*$")
+
+# The backup reader gets the same generous room as a page opened directly, so
+# the writing is not cut before it begins (nav is removed first).
+_READER_MAX_CHARS = 14_000
+
+
+def _clean_reader_text(md: str) -> str | None:
+    """The backup reader returns a page as markdown with a metadata header and
+    the site's navigation ahead of the writing. Cut the header, drop pure
+    navigation lines, and refuse the reader's own error pages so the chain keeps
+    moving to the next source."""
+    if not md:
+        return None
+    lowered = md.lower()
+    if (
+        "warning: target url returned error" in lowered
+        or "warning: this page maybe requiring captcha" in lowered
+        or lowered.startswith(("error", "failed", "could not", "404 page", "page not found"))
+    ):
+        return None
+    marker = "markdown content:"
+    idx = lowered.find(marker)
+    if idx != -1:
+        md = md[idx + len(marker):].lstrip("\n")
+    kept: list[str] = []
+    for line in md.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if kept and kept[-1] != "":
+                kept.append("")
+            continue
+        if _NAV_LINE_RE.match(stripped):
+            continue
+        kept.append(stripped)
+    text = "\n".join(kept).strip()
+    if len(text) > _READER_MAX_CHARS:
+        text = text[:_READER_MAX_CHARS] + "\n… (truncated)"
+    return text or None
+
+
+# The backup readers: a page that refuses a direct fetch (403 bot-wall, JS
+# challenge) is fetched and rendered elsewhere, which returns just the words.
+# Best-effort — some pages refuse everywhere — and still subject to the same
+# output cap. Tried in order: the extraction proxy, then the Wayback Machine's
+# nearest snapshot.
+_READER_ENDPOINT = "https://r.jina.ai/"
+_WAYBACK_ENDPOINT = "https://web.archive.org/web/2/"
+
+
+def _reader_text(url: str) -> str | None:
+    """Words from the extraction proxy. With a key we first ask for the page's
+    main region only (so site chrome is skipped entirely); if that yields
+    nothing, we take the full rendering and clean it."""
+    base_headers = {"User-Agent": _BROWSE_UA}
+    key = getattr(get_settings(), "mira_reader_api_key", "")
+    if key:
+        base_headers["Authorization"] = f"Bearer {key}"
+    for target in (("main", "") if key else ("",)):
+        headers = dict(base_headers)
+        if target:
+            headers["X-Target-Selector"] = target
+        try:
+            resp = httpx.get(
+                f"{_READER_ENDPOINT}{url}",
+                timeout=_BROWSE_TIMEOUT * 2,
+                follow_redirects=True,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            text = _clean_reader_text(resp.text)
+        except Exception as exc:  # noqa: BLE001 - a backup reader must never break the reply
+            logger.debug("backup reader failed for %s: %s", url, exc)
+            text = None
+        if text:
+            return text
+    return None
+
+
+def _wayback_text(url: str) -> str | None:
+    try:
+        resp = httpx.get(
+            f"{_WAYBACK_ENDPOINT}{url}",
+            timeout=_BROWSE_TIMEOUT * 2,
+            follow_redirects=True,
+            headers={"User-Agent": _BROWSE_UA},
+        )
+        if resp.status_code != 200 or "html" not in resp.headers.get("content-type", ""):
+            return None
+        text = _page_to_text(resp.text)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("wayback reader failed for %s: %s", url, exc)
+        return None
+    return text or None
+
+
+def _backup_text(url: str) -> str | None:
+    """Words from the backup readers, in order: the extraction proxy, then the
+    Wayback Machine's nearest snapshot."""
+    for reader in (_reader_text, _wayback_text):
+        try:
+            text = reader(url)
+        except Exception:  # noqa: BLE001 - one reader must never break the chain
+            text = None
+        if text:
+            return text
+    return None
+
+
+def _refused(text: str) -> bool:
+    return text.startswith("[error]") or text.startswith("[refused]")

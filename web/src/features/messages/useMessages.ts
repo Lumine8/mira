@@ -62,7 +62,7 @@ export interface DocumentNote {
   conversationId: number;
 }
 
-export function useMessages() {
+export function useMessages(accountKey?: string | null) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [active, setActive] = useState<ActiveThread | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -76,6 +76,7 @@ export function useMessages() {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [consentError, setConsentError] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocumentNote[]>([]);
+  const [creatingDocs, setCreatingDocs] = useState<number[]>([]);
   const socketRef = useRef<MiraSocket | null>(null);
   const activeRef = useRef<ActiveThread | null>(null);
   const spokenRef = useRef<string | null>(null);
@@ -90,6 +91,20 @@ export function useMessages() {
         ? prev
         : [...prev, d],
     );
+  }, []);
+
+  /** A conversation's research has started being written up — the chat shows
+   *  the paper forming until document_created lands. */
+  const noteCreating = useCallback((conversationId: number) => {
+    setCreatingDocs((prev) =>
+      prev.includes(conversationId) ? prev : [...prev, conversationId],
+    );
+  }, []);
+
+  /** The paper is finished and openable — the forming state gives way to the
+   *  chip that opens it. */
+  const clearCreating = useCallback((conversationId: number) => {
+    setCreatingDocs((prev) => prev.filter((id) => id !== conversationId));
   }, []);
 
   const mergePending = useCallback((changes: PendingChange[]) => {
@@ -120,6 +135,30 @@ export function useMessages() {
   }, []);
 
   useEffect(() => {
+    // A different account signed in (or guest mode toggled): nothing the
+    // previous account saw may leak over — its threads, its open socket, its
+    // pending requests, its documents. Start clean and reload under the new
+    // identity. The key is the account (user id / guest), so it only changes
+    // on an actual switch, not on re-renders.
+    socketRef.current?.close();
+    socketRef.current = null;
+    activeRef.current = null;
+    setConversations([]);
+    setActive(null);
+    setPendingChanges([]);
+    setChangeHistory([]);
+    setCurrentRequest(null);
+    setResolvingId(null);
+    setConsentError(null);
+    setDocs([]);
+    setCreatingDocs([]);
+    setStreaming("");
+    streamingRef.current = "";
+    setThinking(false);
+    setActivity(null);
+    setConnected(false);
+    setError(null);
+
     void fetchHistory().then(setConversations).catch(() => setError("could not load history"));
     void fetchPending()
       .then(reconcilePending)
@@ -139,7 +178,7 @@ export function useMessages() {
       clearInterval(poll);
       socketRef.current?.close();
     };
-  }, [reconcilePending]);
+  }, [reconcilePending, accountKey]);
 
   const openConversation = useCallback(async (id: number) => {
     socketRef.current?.close();
@@ -452,6 +491,9 @@ export function useMessages() {
     refreshActive,
     docs,
     noteDocument,
+    creatingDocs,
+    noteCreating,
+    clearCreating,
     resolveChange,
     dismissRequest,
     injectSelf,

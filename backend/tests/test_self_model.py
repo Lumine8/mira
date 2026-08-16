@@ -1,10 +1,11 @@
 from app.services.self.service import (
     _OTHER_DELIVERY_CHARS,
-    _clean,
     _clamp,
+    _clean,
     _delivery_text,
     _num,
     extract_json,
+    upsert_impression,
 )
 
 
@@ -68,3 +69,144 @@ def test_delivery_research_gets_full_room() -> None:
     text = _delivery_text(research)
     assert len(text) == 3000
     assert "abstract " in text
+
+
+def test_upsert_impression_merges_dedupes_and_keeps_fresh_verdict() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models import Conversation, ConversationImpression, User
+
+    engine = create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+    Conversation.__table__.create(engine)
+    ConversationImpression.__table__.create(engine)
+    db = sessionmaker(bind=engine)()
+
+    guest = User(name="guest", role="guest", fingerprint="fp-1")
+    db.add(guest)
+    db.flush()
+    conv = Conversation(kind="porch", user_id=guest.id)
+    db.add(conv)
+    db.flush()
+
+    upsert_impression(
+        db,
+        user_id=guest.id,
+        conversation_id=conv.id,
+        verdict="liked",
+        moments_liked=["the light", "the way you noticed it"],
+        moments_not_liked=[],
+    )
+    upsert_impression(
+        db,
+        user_id=guest.id,
+        conversation_id=conv.id,
+        verdict="mixed",
+        moments_liked=["the light", "the way you noticed it", "the rain"],
+        moments_not_liked=["the rushing"],
+    )
+    db.commit()
+
+    row = db.query(ConversationImpression).filter_by(conversation_id=conv.id).one()
+    assert row.verdict == "mixed"
+    assert row.moments_liked == ["the light", "the way you noticed it", "the rain"]
+    assert row.moments_not_liked == ["the rushing"]
+
+
+def test_upsert_impression_rejects_garbage_verdict() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models import Conversation, ConversationImpression, User
+
+    engine = create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+    Conversation.__table__.create(engine)
+    ConversationImpression.__table__.create(engine)
+    db = sessionmaker(bind=engine)()
+
+    guest = User(name="guest", role="guest", fingerprint="fp-2")
+    db.add(guest)
+    db.flush()
+    conv = Conversation(kind="porch", user_id=guest.id)
+    db.add(conv)
+    db.flush()
+
+    upsert_impression(
+        db,
+        user_id=guest.id,
+        conversation_id=conv.id,
+        verdict="loved it!!!",
+        moments_liked="not a list",
+        moments_not_liked=[None, "   ", "a real one"],
+    )
+    db.commit()
+
+    row = db.query(ConversationImpression).filter_by(conversation_id=conv.id).one()
+    assert row.verdict is None
+    assert row.moments_liked == []
+    assert row.moments_not_liked == ["a real one"]
+
+
+def test_digest_writes_impression_for_conversations_but_not_the_porch(monkeypatch) -> None:
+    """The per-turn digest captures her liked/not-liked moments and verdict for
+    real conversations; the porch is judged by its own fast read at the end, so
+    the slow digest never races it for the same impression."""
+    import asyncio
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import app.services.self.service as self_service
+    from app.models import (
+        Conversation,
+        ConversationImpression,
+        MiraState,
+        MoodRecord,
+        Relationship,
+        User,
+    )
+    from app.services.self.service import SelfModelService
+
+    engine = create_engine("sqlite:///:memory:")
+    for table in (User, Conversation, MiraState, Relationship, MoodRecord, ConversationImpression):
+        table.__table__.create(engine)
+    db = sessionmaker(bind=engine)()
+
+    class FakeSettings:
+        console_emotions_enabled = False
+
+    monkeypatch.setattr(self_service, "get_settings", lambda: FakeSettings())
+
+    class FakeProvider:
+        async def complete(self, messages, **kwargs):
+            return (
+                '{"summary": "a quiet talk", "mood": "curious", "energy": 60, '
+                '"verdict": "mixed", "moments_liked": ["the way they paused"], '
+                '"moments_not_liked": []}'
+            )
+
+    user = User(name="voice", role="founder")
+    db.add(user)
+    db.flush()
+    text_conv = Conversation(kind="text", user_id=user.id)
+    porch_conv = Conversation(kind="porch", user_id=user.id)
+    db.add(text_conv)
+    db.add(porch_conv)
+    db.commit()
+
+    async def _run(conv_id: int) -> None:
+        svc = SelfModelService(db, FakeProvider(), user_id=user.id)
+        await svc.run_digest(conv_id, "hi", "hello", history=[])
+
+    asyncio.run(_run(text_conv.id))
+    asyncio.run(_run(porch_conv.id))
+
+    text_impression = db.query(ConversationImpression).filter_by(conversation_id=text_conv.id).first()
+    assert text_impression is not None
+    assert text_impression.verdict == "mixed"
+    assert "the way they paused" in text_impression.moments_liked
+
+    porch_impression = db.query(ConversationImpression).filter_by(conversation_id=porch_conv.id).first()
+    assert porch_impression is None

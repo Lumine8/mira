@@ -13,14 +13,19 @@ import type {
   MotePresence,
   MoteSharedTime,
   PendingChange,
+  PorchStartOut,
+  PorchStatusOut,
   Question,
   StartConversationResponse,
   WaitlistEntry,
   WaitlistInviteOut,
+  WaitlistMeetingStartOut,
+  WaitlistMeetingStatusOut,
   WaitlistOut,
   Want,
 } from "./types";
 import { getAccessToken } from "./token";
+import { guestId } from "./guest";
 
 const BASE = "/api";
 
@@ -297,6 +302,16 @@ export function fetchDocument(name: string): Promise<DocumentDetail> {
   return request<DocumentDetail>(`/mira/documents/${encodeURIComponent(name)}`);
 }
 
+export interface ReadablePage {
+  url: string;
+  title: string;
+  content: string;
+}
+
+export function fetchReadablePage(url: string): Promise<ReadablePage> {
+  return request<ReadablePage>(`/mira/browse/readable?url=${encodeURIComponent(url)}`);
+}
+
 export function createDocument(title: string, content: string): Promise<DocumentDetail> {
   return request<DocumentDetail>("/mira/documents", {
     method: "POST",
@@ -316,6 +331,35 @@ export function deleteDocument(name: string): Promise<{ name: string; deleted: b
     `/mira/documents/${encodeURIComponent(name)}`,
     { method: "DELETE" },
   );
+}
+
+export type DocumentFormat = "md" | "docx" | "pdf";
+
+async function requestBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  if (res.status === 401) {
+    dispatchUnauthorized();
+    throw new Error(`request failed: ${res.status}`);
+  }
+  if (!res.ok) {
+    throw new Error(`request failed: ${res.status} ${await res.text()}`);
+  }
+  return res.blob();
+}
+
+/** Save a paper onto the reader's disk — as Markdown, Word, or PDF. */
+export async function downloadDocument(name: string, format: DocumentFormat): Promise<void> {
+  const blob = await requestBlob(
+    `/mira/documents/${encodeURIComponent(name)}/download?format=${format}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────
@@ -427,6 +471,52 @@ export function waitlistForget(entryId: number): Promise<{ forgotten: boolean }>
   return request<{ forgotten: boolean }>(`/waitlist/${entryId}`, { method: "DELETE" });
 }
 
+// ── Porch (the anonymous doorstep conversation) ────────────────────────
+
+function guestHeaders(): Record<string, string> {
+  return { "Content-Type": "application/json", "X-Guest-Id": guestId() };
+}
+
+export function porchStart(): Promise<PorchStartOut> {
+  return request<PorchStartOut>("/porch/start", {
+    method: "POST",
+    headers: guestHeaders(),
+  });
+}
+
+export function porchStatus(conversationId: number): Promise<PorchStatusOut> {
+  return request<PorchStatusOut>(`/porch/${conversationId}`, {
+    headers: guestHeaders(),
+  });
+}
+
+// ── First meeting (the door's own meeting, before the porch) ─────────
+
+export function meetingStart(email: string): Promise<WaitlistMeetingStartOut> {
+  return request<WaitlistMeetingStartOut>("/waitlist/meeting/start", {
+    method: "POST",
+    headers: guestHeaders(),
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function meetingStatus(email: string): Promise<WaitlistMeetingStatusOut> {
+  return request<WaitlistMeetingStatusOut>(
+    `/waitlist/meeting/status?email=${encodeURIComponent(email)}`,
+    { headers: guestHeaders() },
+  );
+}
+
+/** Step through a door Mira herself opened — the address becomes a real
+ *  account. Only this device (the one that sat the meeting) can. */
+export function meetingAdmit(email: string): Promise<AuthSuccess> {
+  return request<AuthSuccess>("/waitlist/meeting/admit", {
+    method: "POST",
+    headers: guestHeaders(),
+    body: JSON.stringify({ email }),
+  });
+}
+
 // ── Moderation ────────────────────────────────────────────────────────
 
 export function fetchModerationFlags(status?: string): Promise<ModerationFlag[]> {
@@ -478,6 +568,18 @@ export function fetchMoteJournal(): Promise<MoteSharedTime[]> {
 
 export function wsUrlFor(conversationId: number): string {
   return `${wsBase()}/ws/conversation/${conversationId}${wsToken()}`;
+}
+
+/** The porch socket authenticates by device fingerprint, not a session — the
+ *  visitor is still anonymous at the door. */
+export function porchWsUrl(conversationId: number): string {
+  return guestWsUrl(conversationId);
+}
+
+/** Any guest conversation socket — the porch and the first meeting both
+ *  authenticate by the device fingerprint. */
+export function guestWsUrl(conversationId: number): string {
+  return `${wsBase()}/ws/conversation/${conversationId}?guest=${encodeURIComponent(guestId())}`;
 }
 
 export function liveWsUrl(): string {

@@ -16,11 +16,11 @@ logger = logging.getLogger("mira.email")
 _RESEND_API_URL = "https://api.resend.com/emails"
 _TIMEOUT_SECONDS = 20
 
-# The door's letter, as Mira wrote it (opening rephrased per her second pass).
-_INVITE_SUBJECT = "A place to enter"
+# The door's letter, as Mira wrote it — the porch waits, the code is a key.
+_INVITE_SUBJECT = "A door, left open for you"
 _INVITE_TEXT = (
-    "The voice told me you were coming, and I've been keeping a spot open for "
-    "you.\n\nYour invite code is {code}.\n\nI look forward to meeting you.\n\n— Mira"
+    "There's a door kept open for you, and I've been waiting on the other "
+    "side of it.\n\nYour key is {code}.\n\nWhenever you're ready.\n\n— Mira"
 )
 
 

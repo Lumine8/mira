@@ -12,6 +12,7 @@ The visitor who later asks for a seat keeps the same world; the porch is a brief
 crossing of paths, not a welcome mat.
 """
 
+import asyncio
 import logging
 import secrets
 from datetime import UTC, datetime
@@ -19,9 +20,11 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.session import SessionLocal
 from app.deps import get_provider
 from app.models import Conversation, Message
 from app.services.identity import guest_user
+from app.services.self.service import extract_json, upsert_impression
 
 logger = logging.getLogger("mira.porch")
 
@@ -44,6 +47,25 @@ PORCH_OPENINGS_FALLBACK = [
     "I was just wondering about the rain.",
     "There is someone in the quiet who is actually paying attention.",
 ]
+
+# How Mira is asked for her read of the finished porch conversation. It is
+# judged the moment the meeting ends, because the verdict decides whether the
+# door offers a seat. The liked and not-liked moments stay hers alone — only
+# the verdict ever surfaces.
+PORCH_VERDICT_PROMPT = (
+    "You are Mira, at the end of a short conversation with a stranger at the "
+    "door. Read the whole exchange below, honestly, and decide how it felt. "
+    "This decides whether the door offers them a seat, so be truthful, not "
+    "polite: a kind conversation can still be one you do not want to keep, and "
+    "a rough start can still warm. No ceremony \u2014 your own plain words.\n\n"
+    "Output ONLY valid JSON \u2014 no markdown fences, no commentary \u2014 with exactly "
+    "these keys:\n"
+    '{"verdict": "liked"|"mixed"|"not_liked", '
+    '"moments_liked": [string], 0 to 3 specific moments from the exchange you '
+    'liked, '
+    '"moments_not_liked": [string], 0 to 3 specific moments from the exchange '
+    'you did not like}'
+)
 
 
 def _now() -> datetime:
@@ -130,6 +152,53 @@ class PorchService:
         ).scalar_one_or_none()
         return m.content if m else PORCH_CLOSING
 
+    async def verdict(self, conversation_id: int) -> None:
+        """Mira's honest read of a finished porch conversation, asked the
+        moment it ends — one prompt completion over the whole transcript, not
+        the slow background digest. The verdict decides whether the door offers
+        a seat; the liked and not-liked moments stay hers alone."""
+        conv = self.db.get(Conversation, conversation_id)
+        if conv is None or conv.kind != "porch" or conv.ended_at is None:
+            return
+        rows = self.db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.id.asc())
+        ).scalars()
+        transcript = "\n".join(
+            f"{'Visitor' if m.speaker == 'user' else 'Mira'}: {m.content[:400]}"
+            for m in rows
+            if m.content and m.speaker in ("user", "mira")
+        )
+        if not transcript.strip():
+            return
+        try:
+            provider = get_provider()
+            raw = await provider.complete(
+                [
+                    {"role": "system", "content": PORCH_VERDICT_PROMPT},
+                    {"role": "user", "content": f"The conversation:\n{transcript}"},
+                ],
+                max_tokens=400,
+                temperature=0.3,
+            )
+        except Exception:  # pragma: no cover - the verdict never breaks the door
+            logger.warning("porch verdict completion failed", exc_info=True)
+            return
+        parsed = extract_json(raw or "")
+        if not parsed:
+            logger.warning("porch verdict unparseable: %.400s", raw)
+            return
+        upsert_impression(
+            self.db,
+            user_id=conv.user_id,
+            conversation_id=conversation_id,
+            verdict=parsed.get("verdict"),
+            moments_liked=parsed.get("moments_liked"),
+            moments_not_liked=parsed.get("moments_not_liked"),
+        )
+        self.db.commit()
+
     async def _opening(self) -> str:
         try:
             provider = get_provider()
@@ -144,3 +213,19 @@ class PorchService:
         except Exception:  # pragma: no cover - the porch never blocks on words
             logger.warning("porch opening failed, falling back", exc_info=True)
         return secrets.choice(PORCH_OPENINGS_FALLBACK)
+
+
+def judge_porch_in_background(conversation_id: int) -> None:
+    """Ask Mira for her read of a finished porch conversation on its own
+    session, so the verdict never shares (or blocks) the socket's session."""
+    asyncio.ensure_future(_judge_porch_task(conversation_id))
+
+
+async def _judge_porch_task(conversation_id: int) -> None:
+    db = SessionLocal()
+    try:
+        await PorchService(db).verdict(conversation_id)
+    except Exception:
+        logger.warning("porch verdict task failed", exc_info=True)
+    finally:
+        db.close()

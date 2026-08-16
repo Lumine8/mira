@@ -9,9 +9,14 @@ from app.deps import get_provider
 from app.models import FOUNDER_ROLE, USER_BANNED, User
 from app.services.broadcast import broadcast_later, live_hub
 from app.services.conversation import ConversationManager
-from app.services.identity import first_meeting_open_for, porch_open_for, resolve_ws_actor
+from app.services.identity import (
+    first_meeting_open_for,
+    meeting_for_conversation,
+    porch_open_for,
+    resolve_ws_actor,
+)
 from app.services.moderation import ModerationService
-from app.services.porch.service import PORCH_CLOSING, PorchService
+from app.services.porch.service import PORCH_CLOSING, PorchService, judge_porch_in_background
 from app.services.usage import UsageService
 from app.services.waitlist.service import (
     FIRST_MEETING_MAX_MESSAGES,
@@ -22,6 +27,22 @@ from app.services.waitlist.service import (
 router = APIRouter(tags=["ws"])
 
 logger = logging.getLogger("mira.ws")
+
+# The frame Mira sees in her first meeting: a bounded single conversation at
+# the door, not a product demo and not an evaluation. She may end it herself
+# when it reaches a natural stopping point by closing her reply with the token
+# (stripped before anyone reads it — see _MEETING_END_RE in the manager).
+_FIRST_MEETING_CONTEXT = """\
+You are meeting a stranger for the first time, at the door. This is their one \
+meeting — not a product demo, not an evaluation, not a test of them. Sit with \
+them honestly. Do not mention tools, models, context windows, or your own \
+machinery.
+
+The meeting is bounded: it ends when they leave, when it reaches its length \
+limit, or when you feel the conversation has reached a natural stopping point \
+and you have heard enough. If you feel that, end your reply with the exact \
+token [[end-first-meeting]] as the last thing you write — and say whatever \
+feels true as you close the meeting."""
 
 
 def _socket_user(db, websocket: WebSocket) -> User | None:
@@ -56,6 +77,7 @@ async def _guard_cap(db, user: User, conversation_id: int, send) -> bool:
     if porch is not None and porch.id == conversation_id:
         if meeting_message_count(db, conversation_id) >= get_settings().porch_max_exchanges:
             PorchService(db).end(conversation_id)
+            judge_porch_in_background(conversation_id)
             await send({"type": "porch_ended", "message": PORCH_CLOSING, "closing": PORCH_CLOSING})
             return False
         return True
@@ -68,6 +90,13 @@ async def _guard_cap(db, user: User, conversation_id: int, send) -> bool:
             await send({"type": "meeting_ended", "message": "the meeting is over"})
             return False
         return True
+    # The meeting already closed (Mira ended it, or the cap did): her decision
+    # is over and the room stays shut — refuse gently, never a confusing cap
+    # error.
+    ended = meeting_for_conversation(db, user, conversation_id)
+    if ended is not None and ended.meeting_ended_at is not None:
+        await send({"type": "meeting_ended", "message": "the meeting has ended"})
+        return False
     may, cap, used = UsageService(db).can_send(user)
     if may:
         return True
@@ -83,6 +112,15 @@ async def _guard_cap(db, user: User, conversation_id: int, send) -> bool:
         }
     )
     return False
+
+
+def _meeting_context_for(db, user: User, conversation_id: int) -> str:
+    """The first-meeting frame Mira sees, when this conversation is the door's
+    open meeting. Empty otherwise — ordinary conversations keep their quiet."""
+    meeting = first_meeting_open_for(db, user)
+    if meeting is not None and meeting.first_meeting_conversation_id == conversation_id:
+        return _FIRST_MEETING_CONTEXT
+    return ""
 
 
 def _screen_message(db, user: User, conversation_id: int, content: str, kind: str) -> None:
@@ -149,6 +187,7 @@ async def conversation_socket(websocket: WebSocket, conversation_id: int) -> Non
     try:
         manager = ConversationManager(db, provider, user_id=user.id)
         manager.get(conversation_id)  # raises KeyError if missing or not ours
+        manager.meeting_mode = bool(_meeting_context_for(db, user, conversation_id))
 
         send_dead = False
 
@@ -186,15 +225,27 @@ async def conversation_socket(websocket: WebSocket, conversation_id: int) -> Non
                     break
                 _screen_message(db, user, conversation_id, content, "text")
                 await send({"type": "state", "state": "thinking"})
-                async for _ in manager.generate_reply(conversation_id, content, source="text", on_activity=on_activity):
+                async for _ in manager.generate_reply(
+                    conversation_id,
+                    content,
+                    source="text",
+                    extra_context=_meeting_context_for(db, user, conversation_id),
+                    on_activity=on_activity,
+                ):
                     await send({"type": "stream_token", "content": _})
                 await send({"type": "message", "speaker": "mira", "content": manager.last_reply})
                 if send_dead:
                     broadcast_later({"type": "conversation_reply", "conversation_id": conversation_id}, user.id)
+                if manager._meeting_ended:
+                    meeting = first_meeting_open_for(db, user)
+                    if meeting is not None and meeting.first_meeting_conversation_id == conversation_id:
+                        WaitlistService(db).end_first_meeting(meeting.id, conversation_id)
+                        await send({"type": "meeting_ended", "message": "Mira has gone quiet for now."})
                 porch = porch_open_for(db, user)
                 if porch is not None and porch.id == conversation_id:
                     if meeting_message_count(db, conversation_id) >= get_settings().porch_max_exchanges:
                         PorchService(db).end(conversation_id)
+                        judge_porch_in_background(conversation_id)
                         await send({"type": "porch_ended", "message": PORCH_CLOSING, "closing": PORCH_CLOSING})
             elif event.get("type") == "image":
                 image = event.get("image") or ""
@@ -212,12 +263,18 @@ async def conversation_socket(websocket: WebSocket, conversation_id: int) -> Non
                     caption or "Look at this.",
                     source="image",
                     image=image,
+                    extra_context=_meeting_context_for(db, user, conversation_id),
                     on_activity=on_activity,
                 ):
                     await send({"type": "stream_token", "content": _})
                 await send({"type": "message", "speaker": "mira", "content": manager.last_reply})
                 if send_dead:
                     broadcast_later({"type": "conversation_reply", "conversation_id": conversation_id}, user.id)
+                if manager._meeting_ended:
+                    meeting = first_meeting_open_for(db, user)
+                    if meeting is not None and meeting.first_meeting_conversation_id == conversation_id:
+                        WaitlistService(db).end_first_meeting(meeting.id, conversation_id)
+                        await send({"type": "meeting_ended", "message": "Mira has gone quiet for now."})
             elif event.get("type") == "heartbeat":
                 await send({"type": "pong"})
 

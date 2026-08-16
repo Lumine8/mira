@@ -129,6 +129,42 @@ export interface StartConversationResponse {
   ws_url: string;
 }
 
+// ── Porch ───────────────────────────────────────────────────────────────
+
+export interface PorchStartOut {
+  conversation_id: number;
+  opening: string;
+  ended: boolean;
+}
+
+/** Mira's private read of the finished porch visit. Only her verdict is ever
+ *  exposed — the moments she liked or did not like are hers alone. */
+export interface PorchStatusOut {
+  conversation_id: number;
+  ended: boolean;
+  verdict: string | null;
+}
+
+// ── First meeting ────────────────────────────────────────────────────
+
+export interface WaitlistMeetingStartOut {
+  id: number;
+  email: string;
+  status: string;
+  conversation_id: number | null;
+  opening: string;
+  meeting_ended_at: string | null;
+}
+
+/** Mira's authoritative state for a first meeting. Only the outcome ever
+ *  surfaces — never her read or any reasoning. Status is one of
+ *  waiting | meeting | considering | invited | waitlisted | closed | joined. */
+export interface WaitlistMeetingStatusOut {
+  status: string;
+  conversation_id: number | null;
+  meeting_ended_at: string | null;
+}
+
 export type WsEvent =
   | { type: "state"; state: string }
   | { type: "stream_token"; content: string }
@@ -137,10 +173,12 @@ export type WsEvent =
   | { type: "self_message"; content: string; conversation_id: number }
   | { type: "browse_activity"; url: string; status: string; change_id: number }
   | { type: "conversation_reply"; conversation_id: number }
+  | { type: "document_creating"; conversation_id: number }
   | { type: "document_created"; name: string; author: "founder" | "mira"; conversation_id: number }
   | { type: "activity"; label: string }
   | { type: "cap_reached"; used: number; cap: number; message: string }
   | { type: "meeting_ended"; message: string }
+  | { type: "porch_ended"; message: string; closing: string }
   | { type: "banned"; message: string }
   | { type: "mote"; kind: string; mood: string; energy: number; word?: string | null; note?: string | null }
   | { type: "error"; message: string }

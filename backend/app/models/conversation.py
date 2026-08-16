@@ -6,6 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+# Postgres gets true JSONB; sqlite (tests) falls back to plain JSON so the
+# whole model set can be created in-memory.
+from app.models.state import JSONB_PORTABLE
+
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -34,3 +38,20 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+
+class ConversationImpression(Base):
+    """Mira's private read of a conversation: what she liked, what she did not,
+    and her honest verdict. Stored for every conversation she reflects on (and
+    for the porch, judged at the moment it ends). The moments are hers alone —
+    they are never shown to the visitor; only the verdict ever surfaces."""
+
+    __tablename__ = "conversation_impressions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    verdict: Mapped[str | None] = mapped_column(String(16), nullable=True)  # liked | mixed | not_liked
+    moments_liked: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
+    moments_not_liked: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

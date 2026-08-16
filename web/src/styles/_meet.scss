@@ -1,0 +1,372 @@
+@use "tokens" as *;
+
+// ── The meeting: Mira's own room, before the porch ───────────────────
+// Quiet, editorial, unmeasured. No score, no progress, no question numbers —
+// just a door, a room, and someone home. Everything here moves slowly.
+.meet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+
+  &__bar {
+    width: 100%;
+    max-width: 760px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 24px 8px;
+  }
+
+  &__brand {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: $color-text;
+  }
+
+  &__room {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: $color-text-faint;
+  }
+
+  &__link {
+    margin-left: auto;
+    flex: none;
+    font-size: 12px;
+    color: $color-text-faint;
+    padding: 6px 10px;
+    border-radius: 999px;
+    transition: color 0.3s ease;
+
+    &:hover {
+      color: $color-accent;
+    }
+
+    &--foot {
+      margin: 0 auto;
+      font-size: 12px;
+    }
+  }
+
+  &__stage {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    text-align: center;
+
+    &--center {
+      justify-content: center;
+    }
+  }
+
+  &__orb {
+    position: relative;
+    width: min(20vh, 150px);
+    height: min(20vh, 150px);
+    margin-bottom: 18px;
+    animation:
+      orb-breathe var(--orb-breath, 11s) ease-in-out infinite,
+      orb-sway calc(var(--orb-breath, 11s) * 2) ease-in-out infinite alternate;
+  }
+
+  &__eyebrow {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: $color-accent;
+  }
+
+  &__title {
+    margin: 0;
+    font-family: $font-serif;
+    font-size: clamp(26px, 4.5vw, 40px);
+    font-weight: 400;
+    line-height: 1.18;
+    letter-spacing: 0.01em;
+    color: $color-text;
+
+    &--quiet {
+      color: $color-text-dim;
+    }
+  }
+
+  &__lede {
+    margin: 0;
+    max-width: 440px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: $color-text-dim;
+  }
+
+  &__entry {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 340px;
+    margin-top: 10px;
+  }
+
+  &__label {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: $color-text-faint;
+  }
+
+  &__input {
+    width: 100%;
+    padding: 12px 4px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid $color-border;
+    color: $color-text;
+    font-size: 16px;
+    text-align: center;
+    transition: border-color 0.3s ease;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-bottom-color: $color-accent;
+    }
+  }
+
+  &__error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    font-size: 13px;
+    color: $color-hangup;
+    background: rgba(201, 122, 122, 0.08);
+    border: 1px solid rgba(201, 122, 122, 0.25);
+    border-radius: $radius-sm;
+    padding: 9px 12px;
+    text-align: left;
+  }
+
+  &__error-dismiss {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: $color-hangup;
+    font-size: 14px;
+    line-height: 1;
+
+    &:hover {
+      background: rgba(201, 122, 122, 0.15);
+    }
+  }
+
+  &__enter {
+    min-width: 180px;
+    margin-top: 4px;
+    padding: 13px 30px;
+    border-radius: 999px;
+    border: 1px solid $color-accent;
+    background: $color-accent;
+    color: #1c1407;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 0.3s ease, border-color 0.3s ease;
+
+    &:hover:not(:disabled) {
+      background: $color-accent-bright;
+      border-color: $color-accent-bright;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  // ── The room itself (the meeting chat) ─────────────────────────────
+  &__scroll {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: 640px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    padding: 16px 24px 8px;
+  }
+
+  &__line {
+    margin: 0;
+    max-width: 520px;
+    font-family: $font-serif;
+    font-size: clamp(17px, 2.4vw, 21px);
+    line-height: 1.6;
+    color: $color-text;
+    text-align: center;
+
+    &--streaming {
+      color: $color-text-dim;
+    }
+  }
+
+  &__thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 13px;
+    font-style: italic;
+    color: $color-text-faint;
+  }
+
+  &__thinking-light {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(210, 162, 94, 0.85);
+    box-shadow: 0 0 10px rgba(210, 162, 94, 0.45);
+    animation: mote-breathe 3.2s ease-in-out infinite;
+  }
+
+  &__you {
+    margin: 0;
+    max-width: 480px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: $color-text-faint;
+    text-align: center;
+  }
+
+  &__quiet {
+    margin: 0;
+    font-size: 13px;
+    font-style: italic;
+    color: $color-text-faint;
+  }
+
+  &__interim {
+    font-size: 12px;
+    font-style: italic;
+    color: $color-text-faint;
+  }
+
+  &__foot {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 24px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  &__composer {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  &__composer-input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 4px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid $color-border;
+    color: $color-text;
+    font-size: 15px;
+    transition: border-color 0.3s ease;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      outline: none;
+      border-bottom-color: $color-accent;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+
+  &__mic {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid $color-border;
+    color: $color-text-dim;
+    font-size: 15px;
+    line-height: 1;
+    transition: color 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+
+    &:hover:not(:disabled) {
+      color: $color-accent;
+      border-color: $color-accent;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    &--on {
+      color: #1c1407;
+      background: $color-accent;
+      border-color: $color-accent;
+    }
+  }
+
+  &__send {
+    flex: none;
+    padding: 12px 18px;
+    border-radius: 999px;
+    border: 1px solid $color-border;
+    color: $color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+    transition: color 0.3s ease, border-color 0.3s ease;
+
+    &:hover:not(:disabled) {
+      color: $color-text;
+      border-color: $color-accent;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: $color-text-faint;
+    word-break: break-all;
+  }
+}

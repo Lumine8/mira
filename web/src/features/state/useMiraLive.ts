@@ -38,6 +38,7 @@ export function useMiraLive(pendingMessage: string | null, pendingConversationId
     conversationId: number;
     nonce: number;
   } | null>(null);
+  const [creatingEvent, setCreatingEvent] = useState<{ conversationId: number; nonce: number } | null>(null);
   const dismissedContent = useRef<string | null>(null);
 
   useEffect(() => {
@@ -57,6 +58,8 @@ export function useMiraLive(pendingMessage: string | null, pendingConversationId
             conversationId: event.conversation_id,
             nonce: Date.now(),
           });
+        } else if (event.type === "document_creating") {
+          setCreatingEvent({ conversationId: event.conversation_id, nonce: Date.now() });
         }
       },
     });
@@ -87,5 +90,5 @@ export function useMiraLive(pendingMessage: string | null, pendingConversationId
     setBrowse(null);
   }, []);
 
-  return { message, dismiss, browse, dismissBrowse, replyEvent, documentEvent };
+  return { message, dismiss, browse, dismissBrowse, replyEvent, documentEvent, creatingEvent };
 }

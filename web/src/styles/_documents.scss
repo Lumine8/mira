@@ -372,6 +372,13 @@
     min-width: 0;
   }
 
+  &__kicker {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: $color-text-faint;
+  }
+
   &__title {
     margin: 0;
     font-size: 18px;
@@ -416,10 +423,367 @@
     border-top-color: $color-accent;
     animation: documents-spin 0.9s linear infinite;
   }
+
+  &__creating {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    padding: 56px 16px 40px;
+    text-align: center;
+  }
+
+  &__creating-quill {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid $color-border;
+    border-top-color: $color-accent;
+    animation: documents-spin 0.9s linear infinite;
+  }
+
+  &__creating-text {
+    max-width: 46ch;
+    font-size: 14px;
+    line-height: 1.65;
+    color: $color-text-faint;
+  }
+
+  &__browse {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  &__browse-link {
+    font-size: 12px;
+    color: $color-accent;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__browse-body {
+    font-size: 14px;
+    line-height: 1.7;
+    color: $color-text;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  &__paper {
+    animation: paper-rise 0.35s ease both;
+  }
+
+  &__paper-head {
+    text-align: center;
+    padding: 6px 0 22px;
+    border-bottom: 1px solid $color-border;
+    margin-bottom: 22px;
+  }
+
+  &__paper-kicker {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: $color-accent;
+  }
+
+  &__paper-title {
+    margin: 0 0 12px;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    color: $color-text;
+    word-break: break-word;
+  }
+
+  &__paper-byline {
+    margin: 0;
+    font-size: 12px;
+    color: $color-text-dim;
+    font-style: italic;
+  }
+
+  &__paper-body {
+    color: $color-text-dim;
+    font-size: 14.5px;
+    line-height: 1.72;
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: $color-text;
+    }
+
+    h4,
+    h5 {
+      margin: 20px 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: $color-text;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 14px;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+
+      &::marker {
+        color: $color-accent;
+      }
+    }
+
+    blockquote {
+      margin: 0 0 14px;
+      padding: 8px 16px;
+      border-left: 3px solid $color-observing;
+      background: rgba(127, 174, 138, 0.08);
+      border-radius: 0 $radius-md $radius-md 0;
+      color: $color-text;
+    }
+
+    strong {
+      color: $color-text;
+      font-weight: 600;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid $color-border;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+  }
+}
+
+@keyframes paper-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes documents-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+// ── The finished paper, opened as a popup ────────────────────────────────
+
+.docpop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    cursor: default;
+  }
+
+  &__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(720px, 94vw);
+    max-height: 88vh;
+    background: $color-bg;
+    border: 1px solid $color-border;
+    border-radius: $radius-lg;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid $color-border;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  &__download {
+    padding: 7px 14px;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-bg-raised;
+    color: $color-text-dim;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.25s ease, color 0.25s ease, background 0.25s ease;
+
+    &:hover:not(:disabled) {
+      border-color: $color-accent;
+      color: $color-accent-bright;
+      background: rgba(127, 174, 138, 0.08);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+  }
+
+  &__close {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid $color-border;
+    background: $color-bg-raised;
+    color: $color-text-dim;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.25s ease, color 0.25s ease;
+
+    &:hover {
+      border-color: $color-accent;
+      color: $color-accent-bright;
+    }
+  }
+
+  &__body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 26px 34px 40px;
+  }
+
+  &__paper {
+    animation: paper-rise 0.35s ease both;
+  }
+
+  &__paper-head {
+    text-align: center;
+    padding: 6px 0 22px;
+    border-bottom: 1px solid $color-border;
+    margin-bottom: 22px;
+  }
+
+  &__paper-kicker {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: $color-accent;
+  }
+
+  &__paper-title {
+    margin: 0 0 12px;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    color: $color-text;
+    word-break: break-word;
+  }
+
+  &__paper-byline {
+    margin: 0;
+    font-size: 12px;
+    color: $color-text-dim;
+    font-style: italic;
+  }
+
+  &__paper-body {
+    color: $color-text-dim;
+    font-size: 15px;
+    line-height: 1.75;
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: $color-text;
+    }
+
+    h4,
+    h5 {
+      margin: 20px 0 8px;
+      font-size: 14.5px;
+      font-weight: 600;
+      color: $color-text;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 14px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 6px;
+
+      &::marker {
+        color: $color-accent;
+      }
+    }
+
+    blockquote {
+      margin: 0 0 14px;
+      padding: 8px 16px;
+      border-left: 3px solid $color-observing;
+      background: rgba(127, 174, 138, 0.08);
+      border-radius: 0 $radius-md $radius-md 0;
+      color: $color-text;
+    }
+
+    strong {
+      color: $color-text;
+      font-weight: 600;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid $color-border;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
   }
 }

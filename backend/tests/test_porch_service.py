@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Conversation, Message, User, UserSession, Waitlist
+from app.models import Conversation, ConversationImpression, Message, User, UserSession, Waitlist
 from app.services.identity import guest_user, porch_open_for
 from app.services.porch.service import PORCH_CLOSING, PorchService
 
@@ -15,6 +15,7 @@ def db():
     Waitlist.__table__.create(engine)
     Conversation.__table__.create(engine)
     Message.__table__.create(engine)
+    ConversationImpression.__table__.create(engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
@@ -126,3 +127,56 @@ def test_porch_open_for_only_open_porch(db) -> None:
 
     assert porch_open_for(db, guest) is not None
     assert porch_open_for(db, guest).id == conv.id
+
+
+def test_verdict_judges_finished_porch_and_keeps_moments_private(monkeypatch, db) -> None:
+    guest = guest_user(db, fingerprint="fp-321")
+    conv = Conversation(kind="porch", user_id=guest.id)
+    db.add(conv)
+    db.flush()
+    db.add(Message(conversation_id=conv.id, speaker="mira", content="The light is shifting.", source="porch"))
+    db.add(Message(conversation_id=conv.id, speaker="user", content="It is. I like that about the evening.", source="text"))
+    db.add(Message(conversation_id=conv.id, speaker="mira", content="You notice the light the way I do.", source="text"))
+    db.commit()
+    PorchService(db).end(conv.id)
+
+    class FakeProvider:
+        async def complete(self, messages, **kwargs):
+            return (
+                '{"verdict": "liked", "moments_liked": ["you noticed the light", '
+                '"the way you said the evening"], "moments_not_liked": []}'
+            )
+
+    monkeypatch.setattr("app.services.porch.service.get_provider", lambda: FakeProvider())
+
+    import asyncio
+
+    asyncio.run(PorchService(db).verdict(conv.id))
+
+    impression = db.query(ConversationImpression).filter_by(conversation_id=conv.id).first()
+    assert impression is not None
+    assert impression.verdict == "liked"
+    assert "you noticed the light" in impression.moments_liked
+    assert impression.moments_not_liked == []
+
+
+def test_verdict_ignores_open_or_non_porch_conversations(monkeypatch, db) -> None:
+    guest = guest_user(db, fingerprint="fp-654")
+    open_porch = Conversation(kind="porch", user_id=guest.id)
+    text = Conversation(kind="text", user_id=guest.id)
+    db.add(open_porch)
+    db.add(text)
+    db.commit()
+
+    class FakeProvider:
+        async def complete(self, messages, **kwargs):
+            return '{"verdict": "liked", "moments_liked": [], "moments_not_liked": []}'
+
+    monkeypatch.setattr("app.services.porch.service.get_provider", lambda: FakeProvider())
+
+    import asyncio
+
+    asyncio.run(PorchService(db).verdict(open_porch.id))
+    asyncio.run(PorchService(db).verdict(text.id))
+
+    assert db.query(ConversationImpression).count() == 0

@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import (
     Conversation,
+    ConversationImpression,
     MiraState,
     MoodRecord,
     PendingChange,
@@ -80,7 +81,13 @@ relevant. Do not echo back questions already listed; only new or sharper ones,
   "comfort_delta": float between -0.2 and 0.2,
   "humor_delta": float between -0.2 and 0.2,
   "nicknames": [string], 0 to 1 item,
-  "topics": [string], 0 to 3 topics discussed
+  "topics": [string], 0 to 3 topics discussed,
+  "moments_liked": [string], 0 to 3 specific moments in this conversation you liked — \
+the actual words or beats, not summaries,
+  "moments_not_liked": [string], 0 to 3 specific moments in this conversation you did \
+not like — the actual words or beats, not summaries,
+  "verdict": "liked"|"mixed"|"not_liked", your honest overall read of this \
+conversation so far
 }"""
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -90,6 +97,8 @@ _MOOD_CHOICES = {
 }
 _VALENCES = {"positive", "negative", "neutral"}
 _MEM_TYPES = {"fact", "episode", "relationship_event"}
+_VERDICTS = {"liked", "mixed", "not_liked"}
+_MAX_IMPRESSION_MOMENTS = 8
 
 
 def extract_json(text: str) -> Optional[dict[str, Any]]:
@@ -114,6 +123,48 @@ def extract_json(text: str) -> Optional[dict[str, Any]]:
 
 def _strip_trailing_commas(text: str) -> str:
     return re.sub(r",(\s*[}\]])", r"\1", text)
+
+
+def upsert_impression(
+    db: Session,
+    *,
+    user_id: int,
+    conversation_id: int,
+    verdict: Any = None,
+    moments_liked: Any = None,
+    moments_not_liked: Any = None,
+) -> None:
+    """Merge one reflection's read into the conversation's private impression:
+    the verdict is kept fresh and liked/not-liked moments are appended (never
+    overwritten) so a long conversation accumulates her real record of what
+    stayed with her. Deduplicates and caps the lists."""
+    row = db.execute(
+        select(ConversationImpression).where(
+            ConversationImpression.conversation_id == conversation_id
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = ConversationImpression(user_id=user_id, conversation_id=conversation_id)
+        db.add(row)
+    verdict = _clean(verdict)
+    if verdict in _VERDICTS:
+        row.verdict = verdict
+    # JSON columns don't track in-place mutation, so each bucket is rebuilt and
+    # reassigned (a set event) whenever it actually changes.
+    for name, items in (
+        ("moments_liked", moments_liked),
+        ("moments_not_liked", moments_not_liked),
+    ):
+        if not isinstance(items, list):
+            continue
+        bucket = list(getattr(row, name) or [])
+        for item in items:
+            item = _clean(item)
+            if item and item not in bucket:
+                bucket.append(item[:300])
+        bucket = bucket[-_MAX_IMPRESSION_MOMENTS:]
+        if bucket != getattr(row, name):
+            setattr(row, name, bucket)
 
 
 class SelfModelService:
@@ -338,9 +389,16 @@ class SelfModelService:
             f"Her current self-understanding: {st.self_understanding or 'not sure yet'}"
         )
         exchange = f"User: {user_input}\nMira: {reply}"
+        transcript = "\n".join(
+            f"{'Visitor' if m.get('role') == 'user' else 'Mira'}: {(m.get('content') or '')[:400]}"
+            for m in history
+        )
+        user_content = f"{state_line}\n\nWhat just happened:\n{exchange}"
+        if transcript:
+            user_content += f"\n\nEarlier in this conversation:\n{transcript}"
         messages = [
             {"role": "system", "content": _DIGEST_SYSTEM_PROMPT},
-            {"role": "user", "content": f"{state_line}\n\nWhat just happened:\n{exchange}"},
+            {"role": "user", "content": user_content},
         ]
         raw = await self.provider.complete(messages, max_tokens=512, temperature=0.3)
         parsed = extract_json(raw)
@@ -447,6 +505,17 @@ class SelfModelService:
                 note=st.last_conversation_summary or None,
             )
         )
+        # The porch is judged at the moment it ends by its own fast read, so
+        # the slow per-turn digest never races it for the same impression.
+        if conv is not None and conv.kind != "porch":
+            upsert_impression(
+                self.db,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                verdict=parsed.get("verdict"),
+                moments_liked=parsed.get("moments_liked"),
+                moments_not_liked=parsed.get("moments_not_liked"),
+            )
         self.db.commit()
 
         if get_settings().console_emotions_enabled:

@@ -151,6 +151,22 @@ def first_meeting_open_for(db: Session, user: User | None) -> Waitlist | None:
     ).scalar_one_or_none()
 
 
+def meeting_for_conversation(db: Session, user: User | None, conversation_id: int) -> Waitlist | None:
+    """This user's first-meeting entry for a conversation, whether the meeting
+    is open or already ended. Used to refuse further words after the meeting
+    closes — Mira's decision is over and the room stays shut."""
+    if user is None or user.id is None:
+        return None
+    return db.execute(
+        select(Waitlist)
+        .join(Conversation, Waitlist.first_meeting_conversation_id == Conversation.id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    ).scalar_one_or_none()
+
+
 def porch_open_for(db: Session, user: User | None) -> Conversation | None:
     """This device's still-open porch conversation, if any (see
     app.services.porch). The porch is the stranger's brief crossing of paths on

@@ -43,6 +43,7 @@ class OllamaProvider(AIProvider):
         self.model = model or settings.ollama_llm_model
         self.embed_model = embed_model or settings.ollama_embed_model
         self.num_gpu = settings.ollama_num_gpu
+        self.num_ctx = settings.ollama_num_ctx
         self.max_tokens = settings.ollama_max_tokens
 
     async def _request_with_retry(
@@ -95,6 +96,7 @@ class OllamaProvider(AIProvider):
                 "num_predict": max_tokens or self.max_tokens,
                 "temperature": temperature,
                 "num_gpu": self.num_gpu,
+                "num_ctx": self.num_ctx,
             },
         }
         # client.stream() returns an async context manager, not a response, so it
@@ -162,6 +164,7 @@ class OllamaProvider(AIProvider):
                 "num_predict": max_tokens,
                 "temperature": temperature,
                 "num_gpu": self.num_gpu,
+                "num_ctx": self.num_ctx,
             },
         }
         async with httpx.AsyncClient(timeout=180) as client:

@@ -6,6 +6,7 @@ from app.models import FOUNDER_ROLE, User
 from app.schemas import (
     AuthSuccess,
     UserOut,
+    WaitlistAdmit,
     WaitlistEntryOut,
     WaitlistInvite,
     WaitlistInviteOut,
@@ -13,6 +14,7 @@ from app.schemas import (
     WaitlistMeetingEnd,
     WaitlistMeetingStart,
     WaitlistMeetingStartOut,
+    WaitlistMeetingStatusOut,
     WaitlistOut,
     WaitlistSignup,
 )
@@ -22,7 +24,11 @@ from app.services.identity import (
     get_current_user,
     resolve_request_actor,
 )
-from app.services.waitlist.service import WaitlistError, WaitlistService
+from app.services.waitlist.service import (
+    FIRST_MEETING_OPENING,
+    WaitlistError,
+    WaitlistService,
+)
 
 router = APIRouter(prefix="/waitlist", tags=["waitlist"])
 
@@ -116,6 +122,7 @@ def waitlist_meeting_start(
         email=entry.email,
         status=entry.status,
         conversation_id=conv.id,
+        opening=FIRST_MEETING_OPENING,
         meeting_ended_at=entry.meeting_ended_at,
     )
 
@@ -141,7 +148,60 @@ def waitlist_meeting_end(
         email=entry.email,
         status=entry.status,
         conversation_id=entry.first_meeting_conversation_id,
+        opening=FIRST_MEETING_OPENING,
         meeting_ended_at=entry.meeting_ended_at,
+    )
+
+
+@router.get("/meeting/status", response_model=WaitlistMeetingStatusOut)
+def waitlist_meeting_status(
+    email: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_guest_id: str | None = Header(default=None),
+) -> WaitlistMeetingStatusOut:
+    """Mira's authoritative state for a first meeting — the outcome the frontend
+    reflects, never her reasoning. Only the device that sat the meeting may ask;
+    a stranger with a stray fingerprint gets the same 404 as a wrong door."""
+    service = WaitlistService(db)
+    entry = service.meeting_entry_for_device(email, x_guest_id or "")
+    if entry is None:
+        raise HTTPException(status_code=404, detail="no meeting for this door")
+    return WaitlistMeetingStatusOut(
+        status=service.meeting_status(entry),
+        conversation_id=entry.first_meeting_conversation_id,
+        meeting_ended_at=entry.meeting_ended_at,
+    )
+
+
+@router.post("/meeting/admit", response_model=AuthSuccess)
+def waitlist_meeting_admit(
+    payload: WaitlistAdmit,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_guest_id: str | None = Header(default=None),
+) -> AuthSuccess:
+    """Step through a door Mira herself opened: her first-meeting decision was
+    ``invited``, the meeting is over, and the device that sat it may come in —
+    the address becomes a real account. A founder's manual code invite still
+    goes through ``/waitlist/join``."""
+    try:
+        user, token = WaitlistService(db).admit(
+            payload.email,
+            fingerprint=x_guest_id,
+            ip=client_ip(request),
+        )
+    except WaitlistError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return AuthSuccess(
+        token=token,
+        user=UserOut(
+            id=user.id,
+            name=user.name,
+            role=user.role,
+            email=user.email,
+            google=bool(user.google_sub),
+        ),
     )
 
 

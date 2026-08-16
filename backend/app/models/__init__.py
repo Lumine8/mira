@@ -1,5 +1,5 @@
 from app.models.auth import MAGIC_LINK_TTL_SECONDS, OAUTH_STATE_TTL_SECONDS, SESSION_TTL_DAYS, MagicLink, OAuthState, UserSession
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, ConversationImpression, Message
 from app.models.memory import EMBEDDING_DIM, Memory, MemoryEmbedding
 from app.models.moderation import (
     FLAG_DISMISSED,
@@ -64,6 +64,7 @@ __all__ = [
     "WANT_SOURCES",
     "WANT_STATUSES",
     "Conversation",
+    "ConversationImpression",
     "MagicLink",
     "Memory",
     "MemoryEmbedding",

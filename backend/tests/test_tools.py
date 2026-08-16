@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from app.services.tools.service import ToolError, ToolService
@@ -58,6 +60,15 @@ def test_write_rejected_outside_self_root(tmp_path: pytest.TempPathFactory) -> N
     (tmp_path / "app").mkdir()
     with pytest.raises(ToolError):
         svc._resolve_write("app/main.py")
+
+
+def test_write_lands_conflict_journal_entry(tmp_path: pytest.TempPathFactory) -> None:
+    svc = _svc(str(tmp_path))
+    (tmp_path / "data" / "self").mkdir(parents=True)
+    content = "**Situation:** helped but did not overclaim\n**Resolution:** said what was known\n"
+    svc._apply_write({"path": "data/self/conflicts/2026-08-15-notes.md", "content": content})
+    target = tmp_path / "data" / "self" / "conflicts" / "2026-08-15-notes.md"
+    assert target.read_text(encoding="utf-8") == content
 
 
 def test_browse_rejects_bad_url() -> None:
@@ -163,6 +174,119 @@ def test_write_stays_pending_when_not_autonomous(tmp_path: pytest.TempPathFactor
     change = svc.propose_change("write_file", "make it quieter", {"path": "app/mood.txt", "content": "quiet"})
     assert change.status == "pending"
     assert not (tmp_path / "app" / "mood.txt").exists()
+
+
+def test_approved_document_write_broadcasts_document_created(
+    monkeypatch, tmp_path: pytest.TempPathFactory
+) -> None:
+    """When an approved write lands a paper in her documents folder, the world
+    is told a document was created so the shelf and popup wake up."""
+    import app.services.tools.service as tools_module
+
+    class Session:
+        def __init__(self) -> None:
+            self.objects: dict[int, object] = {}
+            self._next_id = 1
+
+        def add(self, obj) -> None:
+            if getattr(obj, "id", None) is None:
+                obj.id = self._next_id
+                self._next_id += 1
+            self.objects[obj.id] = obj
+
+        def get(self, _model, cid):
+            return self.objects.get(cid)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, _obj) -> None:
+            pass
+
+    sent: list[tuple[dict, int]] = []
+    monkeypatch.setattr(
+        tools_module, "broadcast_later", lambda obj, user_id: sent.append((obj, user_id))
+    )
+    svc = _with_settings(tmp_path, mira_self_write_autonomous=False)
+    svc.db = Session()
+
+    change = svc.propose_change(
+        "write_file",
+        "she wrote a paper about tides",
+        {"path": "data/documents/mira/ocean-tides.md", "content": "# Ocean Tides\n\nTides are waves."},
+    )
+    assert change.status == "pending"
+    svc.approve(change.id)
+
+    assert (tmp_path / "data" / "documents" / "mira" / "ocean-tides.md").exists()
+    assert [o[0]["type"] for o in sent] == ["document_created"]
+    obj, user_id = sent[0]
+    assert obj["name"] == "ocean-tides"
+    assert obj["author"] == "mira"
+    assert user_id == 1
+
+
+def test_approved_non_document_write_does_not_broadcast(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """A self-write that lands outside her documents folder stays quiet — no
+    phantom paper pops up for a skill or mood file."""
+    import app.services.tools.service as tools_module
+
+    class Session:
+        def __init__(self) -> None:
+            self.objects: dict[int, object] = {}
+            self._next_id = 1
+
+        def add(self, obj) -> None:
+            if getattr(obj, "id", None) is None:
+                obj.id = self._next_id
+                self._next_id += 1
+            self.objects[obj.id] = obj
+
+        def get(self, _model, cid):
+            return self.objects.get(cid)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, _obj) -> None:
+            pass
+
+    sent: list[tuple[dict, int]] = []
+    monkeypatch.setattr(
+        tools_module, "broadcast_later", lambda obj, user_id: sent.append((obj, user_id))
+    )
+    svc = _with_settings(tmp_path, mira_self_write_autonomous=False)
+    svc.db = Session()
+
+    change = svc.propose_change(
+        "write_file", "quieter mood", {"path": "data/self/skills/calm.md", "content": "# Calm"}
+    )
+    svc.approve(change.id)
+    assert sent == []
+
+
+def test_autonomous_document_write_broadcasts_document_created(
+    monkeypatch, tmp_path: pytest.TempPathFactory
+) -> None:
+    """Even when self-writes are autonomous (no approval popup), a paper she
+    writes into her documents folder wakes the popup up."""
+    import app.services.tools.service as tools_module
+
+    sent: list[tuple[dict, int]] = []
+    monkeypatch.setattr(
+        tools_module, "broadcast_later", lambda obj, user_id: sent.append((obj, user_id))
+    )
+    svc = _with_settings(tmp_path, mira_self_write_autonomous=True)
+
+    change = svc.propose_change(
+        "write_file",
+        "she wrote a paper about tides",
+        {"path": "data/documents/mira/ocean-tides.md", "content": "# Ocean Tides\n\nTides are waves."},
+    )
+    assert change.status == "approved"
+    assert [o[0]["type"] for o in sent] == ["document_created"]
+    assert sent[0][0]["name"] == "ocean-tides"
+    assert sent[0][0]["author"] == "mira"
 
 
 def test_watch_rejects_bad_url() -> None:
@@ -542,6 +666,32 @@ def test_browse_open_window_auto_approves() -> None:
     assert change.result == "the page text"
 
 
+def test_browse_auto_approves_when_autonomous(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """Browsing is read-only, so by default it runs on its own — no approval
+    popup, no open window required — while staying fully recorded."""
+    svc = _with_settings(tmp_path, mira_browse_autonomous=True)
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._fetch_browse",
+        lambda self, url: f"readable text for {url}",
+    )
+    change = svc.propose_change("browse_url", "research", {"url": "https://www.investopedia.com/terms/b/bullmarket.asp"})
+    assert change.status == "approved"
+    assert change.result == "readable text for https://www.investopedia.com/terms/b/bullmarket.asp"
+
+
+def test_browse_stays_pending_when_wall_closed(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """With browsing autonomy off and no open window, a browse proposal waits for
+    the user's approval instead of fetching."""
+    svc = _with_settings(tmp_path, mira_browse_autonomous=False)
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._fetch_browse",
+        lambda self, url: "should never be called",
+    )
+    change = svc.propose_change("browse_url", "research", {"url": "https://docs.python.org/3/"})
+    assert change.status == "pending"
+    assert change.result is None
+
+
 def test_research_auto_approves_when_autonomous(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
     """Research is read-only, so with the wall open it runs at once — still fully
     recorded in pending_changes, result attached, no approval popup."""
@@ -686,8 +836,104 @@ def test_wikipedia_extract_falls_back_to_html(monkeypatch, tmp_path) -> None:
         raise RuntimeError("network off")
 
     monkeypatch.setattr("app.services.tools.service.httpx.Client", fake_stream)
+    monkeypatch.setattr(
+        "app.services.tools.service._backup_text",
+        lambda _url: None,
+    )
     result = svc._fetch_browse("https://en.wikipedia.org/wiki/Kyoto")
     assert result.startswith("[error]")
+
+
+def test_fetch_browse_falls_back_to_backup_reader(monkeypatch, tmp_path) -> None:
+    """A page that refuses a direct fetch (403 bot-wall) is still read through
+    the backup reader, so her browsing never dead-ends on a refusal."""
+    svc = _svc(str(tmp_path))
+
+    class FakeSettings:
+        self_edit_roots = "."
+        browse_window_open = True
+        host_window_open = False
+        mira_browse_allowed_domains = ""
+        mira_money_deny_domains = ""
+        mira_money_deny_commands = ""
+        mira_archive_path = ""
+
+    import app.services.tools.service as tools_module
+
+    tools_module.get_settings = lambda: FakeSettings()
+
+    def fake_stream(_client, method, url):  # noqa: ANN001, ANN202
+        raise RuntimeError("refused by bot-wall")
+
+    monkeypatch.setattr("app.services.tools.service.httpx.Client", fake_stream)
+    monkeypatch.setattr(
+        "app.services.tools.service._backup_text",
+        lambda _url: "the page, rescued by the backup reader",
+    )
+    result = svc._fetch_browse("https://www.investopedia.com/bull-market-vs-bear-market-5218567")
+    assert result == "the page, rescued by the backup reader"
+
+
+def test_fetch_browse_hard_deadline_returns_timed_out_error(monkeypatch, tmp_path) -> None:
+    """A page that hangs is abandoned after the hard deadline: the read returns
+    a fast '[error] timed out' marker instead of holding up the reply while the
+    content would land only after the turn has already committed."""
+
+    class FakeSettings:
+        self_edit_roots = "."
+        browse_window_open = True
+        host_window_open = False
+        mira_browse_allowed_domains = ""
+        mira_money_deny_domains = ""
+        mira_money_deny_commands = ""
+        mira_archive_path = ""
+
+    import app.services.tools.service as tools_module
+
+    tools_module.get_settings = lambda: FakeSettings()
+
+    class SlowClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def stream(self, _method, _url):
+            time.sleep(5)
+            raise RuntimeError("never reached")
+
+    monkeypatch.setattr("app.services.tools.service.httpx.Client", SlowClient)
+    monkeypatch.setattr("app.services.tools.service._BROWSE_FETCH_DEADLINE", 0.2)
+    monkeypatch.setattr("app.services.tools.service._backup_text", lambda _url: None)
+
+    svc = _svc(str(tmp_path))
+    t0 = time.time()
+    result = svc._fetch_browse("https://slow.example/page")
+    elapsed = time.time() - t0
+    assert result.startswith("[error] timed out")
+    assert elapsed < 3  # far under the 5s fake hang
+
+
+def test_backup_reader_tries_wayback_when_proxy_refuses(monkeypatch) -> None:
+    """The backup chain keeps going: if the extraction proxy is blocked (rate
+    limit, abuse block), the Wayback Machine's nearest snapshot is tried."""
+    from app.services.tools.service import _backup_text
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.services.tools.service._reader_text",
+        lambda url: (calls.append("reader") or None),
+    )
+    monkeypatch.setattr(
+        "app.services.tools.service._wayback_text",
+        lambda url: (calls.append("wayback") or "words from the archive"),
+    )
+    assert _backup_text("https://www.investopedia.com/x") == "words from the archive"
+    assert calls == ["reader", "wayback"]
 
 
 def test_approve_rejects_money_command_defense_in_depth(tmp_path) -> None:

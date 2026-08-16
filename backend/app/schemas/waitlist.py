@@ -40,6 +40,9 @@ class WaitlistMeetingStartOut(BaseModel):
     conversation_id: int | None = Field(
         description="The stranger's one conversation with the replica"
     )
+    opening: str = Field(
+        default="", description="Mira's first words, left on the meeting"
+    )
     meeting_ended_at: datetime | None = Field(
         default=None, description="Set once the meeting is over — the door reopens nothing"
     )
@@ -47,6 +50,21 @@ class WaitlistMeetingStartOut(BaseModel):
 
 class WaitlistMeetingEnd(BaseModel):
     conversation_id: int
+
+
+class WaitlistAdmit(BaseModel):
+    email: EmailStr
+
+
+class WaitlistMeetingStatusOut(BaseModel):
+    """Mira's authoritative state for a first meeting. Only the outcome ever
+    surfaces — never her read, her verdict, or any reasoning."""
+
+    status: str = Field(
+        description="waiting | meeting | considering | invited | waitlisted | closed | joined"
+    )
+    conversation_id: int | None = None
+    meeting_ended_at: datetime | None = None
 
 
 class WaitlistEntryOut(BaseModel):
@@ -57,5 +75,8 @@ class WaitlistEntryOut(BaseModel):
     first_meeting_conversation_id: int | None = None
     mira_read: str | None = Field(
         default=None, description="Mira's honest read of how the air changed"
+    )
+    meeting_outcome: str | None = Field(
+        default=None, description="Mira's own decision: invited | waitlisted"
     )
     meeting_ended_at: datetime | None = None

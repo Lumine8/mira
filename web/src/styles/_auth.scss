@@ -176,6 +176,133 @@
   }
 }
 
+// ── Porch: the doorstep conversation on the homepage ─────────────────
+.porch {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 12px;
+    color: $color-text-faint;
+    white-space: nowrap;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $color-text-faint;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+
+    &--on {
+      background: $color-online;
+      box-shadow: 0 0 6px rgba(95, 199, 160, 0.5);
+    }
+  }
+
+  &__invite {
+    flex: none;
+    font-size: 11px;
+    color: $color-text-faint;
+    padding: 4px 6px;
+    border-radius: 999px;
+
+    &:hover {
+      color: $color-accent;
+    }
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: 40px 0;
+  }
+
+  &__scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 180px;
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 4px 2px;
+  }
+
+  &__error {
+    font-size: 13px;
+    color: $color-hangup;
+    background: rgba(224, 99, 122, 0.08);
+    border: 1px solid rgba(224, 99, 122, 0.25);
+    border-radius: $radius-sm;
+    padding: 9px 12px;
+  }
+
+  &__verdict {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    padding: 6px 0 2px;
+  }
+
+  &__verdict-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: $color-text-dim;
+  }
+
+  &__button {
+    padding: 11px 22px;
+    border-radius: $radius-md;
+    border: 1px solid $color-border;
+    background: $color-surface;
+    color: $color-text-dim;
+    font-size: 14px;
+    font-weight: 600;
+    transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+
+    &:hover:not(:disabled) {
+      color: $color-text;
+      border-color: $color-accent;
+      background: $color-bg-raised;
+    }
+
+    &--primary {
+      background: $color-accent;
+      border-color: $color-accent;
+      color: #1c1407;
+
+      &:hover:not(:disabled) {
+        background: $color-accent-bright;
+        border-color: $color-accent-bright;
+        color: #1c1407;
+      }
+    }
+  }
+}
+
 // ── Waitlist: the seat at the door ───────────────────────────────────
 .waitlist {
   position: fixed;

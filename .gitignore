@@ -9,6 +9,9 @@ venv/
 dist/
 build/
 web/dist/
+*.tsbuildinfo
+.vite/
+.eslintcache
 
 # env & secrets
 .env
@@ -20,12 +23,20 @@ web/dist/
 .DS_Store
 Thumbs.db
 NUL
+*.swp
+*~
+*.tmp
+*.bak
 
 # test / coverage
 .coverage
+.coverage.*
 htmlcov/
+coverage/
 coverage.xml
 .pytest_cache/
+.mypy_cache/
+.pytype/
 
 # logs
 *.log
@@ -54,7 +65,9 @@ scripts/*.local.ps1
 
 # packaging / linter artifacts
 backend/mira_api.egg-info/
+*.egg-info/
 backend/.ruff_cache/
+.ruff_cache/
 
 # runtime data Mira writes/regenerates (not part of the deployable image)
 # conversations.md is rebuilt from the database; learning/ is her own musings

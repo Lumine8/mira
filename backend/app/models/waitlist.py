@@ -29,6 +29,9 @@ class Waitlist(Base):
     # a seat is considered, and Mira's honest read of how the air changed.
     first_meeting_conversation_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     mira_read: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Mira's own decision after the first meeting: "invited" | "waitlisted".
+    # The authoritative outcome the frontend reflects — never her reasoning.
+    meeting_outcome: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     meeting_ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

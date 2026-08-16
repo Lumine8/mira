@@ -13,18 +13,26 @@ import ArchivePanel from "./components/body/ArchivePanel";
 import HomeScreen from "./components/home/HomeScreen";
 import PermissionModal from "./components/messages/PermissionModal";
 import PermissionsSidebar from "./components/messages/PermissionsSidebar";
-import BrowserPanel from "./components/messages/BrowserPanel";
 import SelfBanner from "./components/messages/SelfBanner";
-import DocumentViewer from "./components/documents/DocumentViewer";
+import MiraWindow, { type Artifact } from "./components/window/MiraWindow";
 import AuthScreen from "./components/auth/AuthScreen";
 import ModerationModal from "./components/moderation/ModerationModal";
 import MotePresence from "./components/mote/MotePresence";
 import SkillsScreen from "./components/skills/SkillsScreen";
 import DocumentsScreen from "./components/documents/DocumentsScreen";
+import DocumentModal from "./components/documents/DocumentModal";
 
 export default function App() {
   const session = useSession();
-  const messages = useMessages();
+  // The account keyed by signed-in user (or guest), so switching accounts
+  // reloads all account-scoped state instead of showing the previous one's.
+  const accountKey =
+    session.mode === "user"
+      ? `user:${session.identity?.id ?? ""}`
+      : session.mode === "guest"
+        ? "guest"
+        : null;
+  const messages = useMessages(accountKey);
   const { memory } = useMiraState();
   const live = useMiraLive(
     memory?.state.pending_message ?? null,
@@ -35,6 +43,7 @@ export default function App() {
   const [permsOpen, setPermsOpen] = useState(false);
   const [moderationOpen, setModerationOpen] = useState(false);
   const [view, setView] = useState<"home" | "messages" | "skills" | "documents">("home");
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
   const lastInjected = useRef<string | null>(null);
 
@@ -58,15 +67,37 @@ export default function App() {
 
   useEffect(() => {
     // A research run finished and left a paper on her shelf — remember it so a
-    // chip appears in the thread that produced it.
+    // chip appears in the thread that produced it, and open the finished paper
+    // as a popup (closing the "forming" window if it is open).
     if (live.documentEvent) {
+      const docEvent = live.documentEvent;
+      messages.clearCreating(docEvent.conversationId);
       messages.noteDocument({
-        name: live.documentEvent.name,
-        author: live.documentEvent.author,
-        conversationId: live.documentEvent.conversationId,
+        name: docEvent.name,
+        author: docEvent.author,
+        conversationId: docEvent.conversationId,
       });
+      setArtifact(null);
+      setOpenDoc(docEvent.name);
     }
   }, [live.documentEvent, messages]);
+
+  useEffect(() => {
+    // She started writing a research paper — open the window to watch it form,
+    // and show the creation in the thread too.
+    if (live.creatingEvent) {
+      messages.noteCreating(live.creatingEvent.conversationId);
+      setArtifact({ kind: "creating", conversationId: live.creatingEvent.conversationId });
+    }
+  }, [live.creatingEvent, messages]);
+
+  useEffect(() => {
+    // She is looking at a page — the window shows what she is reading as
+    // words, unless a finished paper is already open as a popup.
+    if (live.browse && !openDoc) {
+      setArtifact({ kind: "browse", url: live.browse.url });
+    }
+  }, [live.browse, openDoc]);
 
   useEffect(() => {
     const onFirstInteraction = () => {
@@ -227,9 +258,15 @@ export default function App() {
         onClose={() => setPermsOpen(false)}
       />
 
-      <BrowserPanel url={live.browse?.url ?? null} status={live.browse?.status ?? null} onClose={live.dismissBrowse} />
+      <MiraWindow
+        artifact={artifact}
+        onClose={() => {
+          setArtifact(null);
+          live.dismissBrowse();
+        }}
+      />
 
-      <DocumentViewer name={openDoc} onClose={() => setOpenDoc(null)} />
+      <DocumentModal name={openDoc} onClose={() => setOpenDoc(null)} />
 
       <ModerationModal open={isFounder && moderationOpen} onClose={() => setModerationOpen(false)} />
     </div>

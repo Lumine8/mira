@@ -30,6 +30,7 @@ from app.schemas.moderation import (
 from app.schemas.mote import MotePresenceOut, MoteSharedTimeOut
 from app.schemas.porch import PorchStartOut
 from app.schemas.waitlist import (
+    WaitlistAdmit,
     WaitlistEntryOut,
     WaitlistInvite,
     WaitlistInviteOut,
@@ -37,6 +38,7 @@ from app.schemas.waitlist import (
     WaitlistMeetingEnd,
     WaitlistMeetingStart,
     WaitlistMeetingStartOut,
+    WaitlistMeetingStatusOut,
     WaitlistOut,
     WaitlistSignup,
 )
@@ -70,6 +72,7 @@ __all__ = [
     "RelationshipOut",
     "SpeakRequest",
     "UserOut",
+    "WaitlistAdmit",
     "WaitlistEntryOut",
     "WaitlistInvite",
     "WaitlistInviteOut",
@@ -77,6 +80,7 @@ __all__ = [
     "WaitlistMeetingEnd",
     "WaitlistMeetingStart",
     "WaitlistMeetingStartOut",
+    "WaitlistMeetingStatusOut",
     "WaitlistOut",
     "WaitlistSignup",
     "WantOut",
