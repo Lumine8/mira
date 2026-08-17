@@ -177,24 +177,58 @@
 }
 
 // ── Porch: the doorstep conversation on the homepage ─────────────────
+// Warm dusk, not bleak: a low amber light, Mira's serif, and soft
+// warm-edged bubbles. A doorstep — no score, no account required.
 .porch {
+  flex: 1;
+  width: 100%;
+  max-width: 620px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 30px 24px calc(18px + env(safe-area-inset-bottom, 0px));
   text-align: left;
+  background:
+    radial-gradient(900px 520px at 50% -10%, rgba(122, 94, 168, 0.3), transparent 62%),
+    radial-gradient(760px 460px at 50% 118%, rgba(210, 162, 94, 0.1), transparent 62%),
+    linear-gradient(#15111c 0%, #0c0a11 100%);
+
+  &__orb {
+    position: relative;
+    align-self: center;
+    width: min(15vh, 120px);
+    height: min(15vh, 120px);
+    margin: 0;
+    animation:
+      orb-breathe var(--orb-breath, 12s) ease-in-out infinite,
+      orb-sway calc(var(--orb-breath, 12s) * 2) ease-in-out infinite alternate;
+  }
+
+  &__eyebrow {
+    margin: 0;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: $color-accent;
+  }
 
   &__head {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding: 0 4px;
   }
 
   &__title {
     margin: 0;
-    font-size: 20px;
-    font-weight: 500;
+    font-family: $font-serif;
+    font-size: 22px;
+    font-weight: 400;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+    color: $color-text;
   }
 
   &__status {
@@ -215,8 +249,8 @@
     transition: background 0.3s ease, box-shadow 0.3s ease;
 
     &--on {
-      background: $color-online;
-      box-shadow: 0 0 6px rgba(95, 199, 160, 0.5);
+      background: $color-accent;
+      box-shadow: 0 0 8px rgba(210, 162, 94, 0.55);
     }
   }
 
@@ -232,6 +266,13 @@
     }
   }
 
+  &__lede {
+    margin: 0 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: $color-text-dim;
+  }
+
   &__loading {
     display: flex;
     justify-content: center;
@@ -239,13 +280,13 @@
   }
 
   &__scroll {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-height: 180px;
-    max-height: 340px;
     overflow-y: auto;
-    padding: 4px 2px;
+    padding: 10px 4px 4px;
   }
 
   &__error {
@@ -299,6 +340,51 @@
         border-color: $color-accent-bright;
         color: #1c1407;
       }
+    }
+  }
+
+  // Warm, quiet bubbles and typing — scoped to the doorstep only, so the
+  // main conversation keeps its own look.
+  & .bubble--mira,
+  & .bubble--streaming {
+    background: rgba(210, 162, 94, 0.07);
+    border-color: rgba(210, 162, 94, 0.24);
+    color: #e8dfd0;
+  }
+
+  & .typing__dot {
+    background: $color-accent;
+    box-shadow: 0 0 6px rgba(210, 162, 94, 0.4);
+  }
+
+  & .composer {
+    border-top: 1px solid rgba(210, 162, 94, 0.14);
+    padding: 12px 4px 0;
+  }
+
+  & .composer__input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba($color-text-faint, 0.45);
+    border-radius: 0;
+    color: $color-text;
+
+    &::placeholder {
+      color: $color-text-faint;
+    }
+
+    &:focus {
+      border-bottom-color: $color-accent;
+      box-shadow: none;
+    }
+  }
+
+  & .composer__send {
+    background: $color-accent;
+    color: #1c1407;
+
+    &:not(:disabled):hover {
+      background: $color-accent-bright;
     }
   }
 }

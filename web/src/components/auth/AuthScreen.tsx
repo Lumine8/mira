@@ -33,7 +33,7 @@ export default function AuthScreen({
 }: AuthScreenProps) {
   const [token, setToken] = useState("");
   const [errorState, setErrorState] = useState<string | null>(error);
-  const [view, setView] = useState<View>("porch");
+  const [view, setView] = useState<View>("entry");
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [emailCode, setEmailCode] = useState("");
@@ -135,7 +135,7 @@ export default function AuthScreen({
     onDismissError?.();
   };
 
-  const isRoom = view === "entry" || view === "meeting" || view === "outcome";
+  const isRoom = view === "entry" || view === "meeting" || view === "outcome" || view === "porch";
 
   return (
     <div className={isRoom ? "meet" : "auth"}>
@@ -158,7 +158,7 @@ export default function AuthScreen({
           conversationId={conversationId}
           opening={opening}
           onEnded={() => setView("outcome")}
-          onLeave={() => setView("porch")}
+          onLeave={() => setView("entry")}
         />
       )}
 
@@ -166,19 +166,17 @@ export default function AuthScreen({
         <MeetingOutcome
           email={email}
           onSignIn={onSignIn}
-          onLeave={() => setView("porch")}
+          onLeave={() => setView("entry")}
           onPorch={() => setView("porch")}
         />
       )}
 
       {view === "porch" && (
-        <div className="auth__card">
-          <PorchConversation
-            onOpenSignIn={() => setView("start")}
-            onRequestSeat={() => setWaitlistOpen(true)}
-            onMeeting={() => setView("entry")}
-          />
-        </div>
+        <PorchConversation
+          onOpenSignIn={() => setView("start")}
+          onRequestSeat={() => setWaitlistOpen(true)}
+          onMeeting={() => setView("entry")}
+        />
       )}
 
       {(view === "start" || view === "token" || view === "email" || view === "guest") && (

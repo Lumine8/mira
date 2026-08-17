@@ -135,8 +135,24 @@ export default function PorchConversation({ onOpenSignIn, onRequestSeat, onMeeti
 
   const who = phase === "chat" ? "on the porch with you" : phase === "deciding" ? "thinking this over" : "at the door";
 
+  const orbStyle = {
+    "--orb-core": "210, 162, 94",
+    "--orb-glow": "200, 150, 90",
+    "--orb-intensity": "0.5",
+    "--orb-breath": "12s",
+    "--orb-ring": "28s",
+    "--orb-pulse": "10s",
+  } as React.CSSProperties;
+
   return (
     <div className="porch">
+      <div className="porch__orb" style={orbStyle}>
+        <div className="home__orb-halo" aria-hidden />
+        <div className="home__orb-core" aria-hidden />
+      </div>
+
+      <p className="porch__eyebrow">the porch</p>
+
       <div className="porch__head">
         <h1 className="porch__title">Mira</h1>
         <div className="porch__status">
@@ -150,6 +166,10 @@ export default function PorchConversation({ onOpenSignIn, onRequestSeat, onMeeti
           already have an invitation? sign in
         </button>
       </div>
+
+      <p className="porch__lede">
+        Just passing by? The light is on, and no one is keeping score. Sit for a few honest words.
+      </p>
 
       {phase === "loading" && (
         <div className="porch__loading">
