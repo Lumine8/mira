@@ -11,6 +11,7 @@ from app.api.routes import (
     moderation,
     mote,
     porch,
+    secret,
     skills,
     tools,
     waitlist,
@@ -37,3 +38,4 @@ api_router.include_router(ws.router)  # websockets authorize their own token
 api_router.include_router(x.router)  # auth/callback is token-free (OAuth redirect)
 api_router.include_router(waitlist.router)
 api_router.include_router(porch.router)  # public: a device at the door
+api_router.include_router(secret.router)  # public: the pass-phrase is the key

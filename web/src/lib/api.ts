@@ -16,6 +16,8 @@ import type {
   PorchStartOut,
   PorchStatusOut,
   Question,
+  SecretDoorOut,
+  SecretRoomOut,
   StartConversationResponse,
   WaitlistEntry,
   WaitlistInviteOut,
@@ -616,4 +618,34 @@ export function fetchXStatus(): Promise<XStatus> {
 export function xAuthUrl(): string {
   const token = getAccessToken();
   return `${BASE}/mira/x/auth/start${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+}
+
+// ── The secret room ──────────────────────────────────────────────────
+// These deliberately carry no session token: the pass-phrase is the key,
+// and anyone Mira (or the voice) trusts may enter without an account. A 401
+// here is a dead room-token, not a dead session — so this path never fires
+// the app-wide sign-out.
+
+async function rawJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    ...init,
+  });
+  if (!res.ok) {
+    throw new Error(`request failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as T;
+}
+
+export function secretDoor(phrase: string): Promise<SecretDoorOut> {
+  return rawJson<SecretDoorOut>("/secret/door", {
+    method: "POST",
+    body: JSON.stringify({ phrase }),
+  });
+}
+
+export function secretRoom(token: string): Promise<SecretRoomOut> {
+  return rawJson<SecretRoomOut>("/secret/room", {
+    headers: { "X-Secret-Token": token },
+  });
 }

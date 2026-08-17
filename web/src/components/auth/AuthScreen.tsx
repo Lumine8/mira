@@ -14,6 +14,8 @@ interface AuthScreenProps {
   onSignIn: (token: string) => void;
   onStartGuest: () => void;
   onDismissError?: () => void;
+  /** The quiet door's way in — triple-pressing the door's warm light. */
+  onSecret?: () => void;
 }
 
 const FALLBACK_OPENING =
@@ -27,6 +29,7 @@ export default function AuthScreen({
   onSignIn,
   onStartGuest,
   onDismissError,
+  onSecret,
 }: AuthScreenProps) {
   const [token, setToken] = useState("");
   const [errorState, setErrorState] = useState<string | null>(error);
@@ -145,6 +148,7 @@ export default function AuthScreen({
           onPorch={() => setView("porch")}
           onSignIn={() => setView("start")}
           onDismissError={dismissError}
+          onSecret={onSecret}
         />
       )}
 

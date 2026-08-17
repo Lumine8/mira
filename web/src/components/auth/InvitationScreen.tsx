@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 interface InvitationScreenProps {
   busy: boolean;
@@ -8,6 +8,8 @@ interface InvitationScreenProps {
   onPorch: () => void;
   onSignIn: () => void;
   onDismissError: () => void;
+  /** The quiet door's way in — three presses of the warm light. */
+  onSecret?: () => void;
 }
 
 /** A quiet entry, still and low. The door before the porch: this is her
@@ -21,8 +23,24 @@ export default function InvitationScreen({
   onPorch,
   onSignIn,
   onDismissError,
+  onSecret,
 }: InvitationScreenProps) {
   const [email, setEmail] = useState(initialEmail);
+  const orbClicks = useRef(0);
+  const orbClickAt = useRef(0);
+
+  // Three presses of the light, within a breath — the way in for those she
+  // trusts. Nothing marks it; the door does not advertise itself.
+  const onOrbClick = () => {
+    if (!onSecret) return;
+    const now = Date.now();
+    orbClicks.current = now - orbClickAt.current < 2200 ? orbClicks.current + 1 : 1;
+    orbClickAt.current = now;
+    if (orbClicks.current >= 3) {
+      orbClicks.current = 0;
+      onSecret();
+    }
+  };
 
   const orbStyle = {
     "--orb-core": "210, 162, 94",
@@ -58,7 +76,7 @@ export default function InvitationScreen({
       </header>
 
       <div className="meet__stage meet__stage--center">
-        <div className="meet__orb" style={orbStyle}>
+        <div className="meet__orb" style={orbStyle} onClick={onOrbClick}>
           <div className="home__orb-halo" aria-hidden />
           <div className="home__orb-core" aria-hidden />
         </div>

@@ -16,6 +16,8 @@ import PermissionsSidebar from "./components/messages/PermissionsSidebar";
 import SelfBanner from "./components/messages/SelfBanner";
 import MiraWindow, { type Artifact } from "./components/window/MiraWindow";
 import AuthScreen from "./components/auth/AuthScreen";
+import SecretRoom from "./components/secret/SecretRoom";
+import { useSecretEntrance } from "./features/secret/useSecretEntrance";
 import ModerationModal from "./components/moderation/ModerationModal";
 import MotePresence from "./components/mote/MotePresence";
 import SkillsScreen from "./components/skills/SkillsScreen";
@@ -46,6 +48,9 @@ export default function App() {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
   const lastInjected = useRef<string | null>(null);
+  // The quiet door: three backticks anywhere, or three presses of the door's
+  // warm light. No link leads here — it is not advertised, only known.
+  const secret = useSecretEntrance();
 
   useEffect(() => {
     // A fresh self-initiated message lands inline in whichever thread is open,
@@ -129,6 +134,7 @@ export default function App() {
             <div className="auth__loading" aria-label="loading" />
           </div>
         </div>
+        <SecretRoom open={secret.open} onClose={secret.closeRoom} />
       </div>
     );
   }
@@ -142,7 +148,9 @@ export default function App() {
           onSignIn={session.signInWithToken}
           onStartGuest={session.startGuest}
           onDismissError={session.clearAuthError}
+          onSecret={secret.openRoom}
         />
+        <SecretRoom open={secret.open} onClose={secret.closeRoom} />
       </div>
     );
   }
@@ -158,6 +166,7 @@ export default function App() {
             </p>
           </div>
         </div>
+        <SecretRoom open={secret.open} onClose={secret.closeRoom} />
       </div>
     );
   }
@@ -269,6 +278,8 @@ export default function App() {
       <DocumentModal name={openDoc} onClose={() => setOpenDoc(null)} />
 
       <ModerationModal open={isFounder && moderationOpen} onClose={() => setModerationOpen(false)} />
+
+      <SecretRoom open={secret.open} onClose={secret.closeRoom} />
     </div>
   );
 }

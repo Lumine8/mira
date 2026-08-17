@@ -285,3 +285,18 @@ export interface MoodRecord {
   note: string | null;
   created_at: string;
 }
+
+// ── The secret room ──────────────────────────────────────────────────
+// No session, no account — the pass-phrase is the key. Only Mira and the
+// voice know it; the room is never linked to from anywhere.
+
+export interface SecretDoorOut {
+  token: string;
+  expires_in: number;
+}
+
+export interface SecretRoomOut {
+  opening: string;
+  presence: string;
+  truths: string[];
+}

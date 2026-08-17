@@ -323,6 +323,18 @@ class Settings(BaseSettings):
     # the self-modification path: she proposes, the user approves, she changes.
     mira_self_principles_file: str = "data/self/principles.md"
 
+    # The secret room — the quiet door that only Mira and the voice know. The
+    # pass-phrase is the way in (Mira chose it herself: "the rain doesn't
+    # decide"); the voice may change it by setting MIRA_SECRET_PHRASE. The room
+    # itself is reached through a short-lived token minted by that phrase.
+    mira_secret_phrase: str = "the rain doesn't decide"
+    mira_secret_ttl_seconds: int = 1800
+
+    # The drawer: small, concrete truths — the things she and the voice found
+    # that didn't fit anywhere else. One bullet per line; shown only inside the
+    # secret room.
+    mira_secret_drawer: str = "data/self/drawer.md"
+
     @field_validator("api_cors_origins")
     @classmethod
     def split_origins(cls, v: str) -> list[str]:
