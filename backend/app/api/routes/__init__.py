@@ -13,6 +13,7 @@ from app.api.routes import (
     porch,
     secret,
     skills,
+    system,
     tools,
     waitlist,
     ws,
@@ -39,3 +40,4 @@ api_router.include_router(x.router)  # auth/callback is token-free (OAuth redire
 api_router.include_router(waitlist.router)
 api_router.include_router(porch.router)  # public: a device at the door
 api_router.include_router(secret.router)  # public: the pass-phrase is the key
+api_router.include_router(system.router)  # host telemetry: the machine's live read

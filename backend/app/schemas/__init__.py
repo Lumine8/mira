@@ -30,6 +30,7 @@ from app.schemas.moderation import (
 from app.schemas.mote import MotePresenceOut, MoteSharedTimeOut
 from app.schemas.porch import PorchStartOut
 from app.schemas.secret import SecretDoorIn, SecretDoorOut, SecretRoomOut
+from app.schemas.system import ProcessSample, SystemSnapshot, SystemSnapshotOut
 from app.schemas.waitlist import (
     WaitlistAdmit,
     WaitlistEntryOut,
@@ -68,6 +69,7 @@ __all__ = [
     "PendingChangeOut",
     "PerceivedEventIn",
     "PorchStartOut",
+    "ProcessSample",
     "ProposeChangeIn",
     "QuestionOut",
     "RelationshipOut",
@@ -75,6 +77,8 @@ __all__ = [
     "SecretDoorOut",
     "SecretRoomOut",
     "SpeakRequest",
+    "SystemSnapshot",
+    "SystemSnapshotOut",
     "UserOut",
     "WaitlistAdmit",
     "WaitlistEntryOut",

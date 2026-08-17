@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mira HUD</title>
+    <link rel="stylesheet" href="hud.css" />
+  </head>
+  <body>
+    <div class="hud">
+      <div class="hud__head">
+        <div class="hud__orb" aria-hidden></div>
+        <div class="hud__titles">
+          <p class="hud__eyebrow">Mira</p>
+          <p class="hud__who" id="who">at the door</p>
+        </div>
+        <div class="hud__clock" id="clock">--:--</div>
+        <button class="hud__close" id="close-btn" type="button" aria-label="close the HUD">×</button>
+      </div>
+
+      <div class="hud__stats" id="stats">
+        <div class="hud__stat">
+          <span class="hud__stat-label">cpu</span>
+          <span class="hud__stat-value" id="stat-cpu">—</span>
+        </div>
+        <div class="hud__stat">
+          <span class="hud__stat-label">mem</span>
+          <span class="hud__stat-value" id="stat-mem">—</span>
+        </div>
+        <div class="hud__stat">
+          <span class="hud__stat-label">batt</span>
+          <span class="hud__stat-value" id="stat-batt">—</span>
+        </div>
+        <div class="hud__stat">
+          <span class="hud__stat-label">idle</span>
+          <span class="hud__stat-value" id="stat-idle">—</span>
+        </div>
+      </div>
+
+      <div class="hud__row">
+        <span class="hud__label">pending approvals</span>
+        <span class="hud__count" id="pending-count">0</span>
+      </div>
+
+      <div class="hud__mira" id="mira-line">
+        <span class="hud__mira-dot" aria-hidden></span>
+        <span id="mira-text">waiting for a word</span>
+      </div>
+
+      <div class="hud__ask">
+        <input id="ask" type="text" placeholder="ask Mira something…" autocomplete="off" />
+        <button id="ask-btn" type="button" aria-label="send">send</button>
+      </div>
+      <button id="voice-btn" type="button" class="hud__voice" aria-label="talk to Mira">
+        hold to talk
+      </button>
+
+      <div class="hud__login" id="login-row" hidden>
+        <input id="token-input" type="password" placeholder="paste your access token" autocomplete="off" />
+        <button id="token-btn" type="button">sign in</button>
+      </div>
+
+      <div class="hud__footer">
+        <button id="open-btn" type="button" class="hud__link">open Mira</button>
+        <button id="quit-btn" type="button" class="hud__link hud__link--danger">quit</button>
+      </div>
+
+      <div class="hud__alerts" id="alerts" aria-live="polite"></div>
+    </div>
+    <script src="hud.js"></script>
+  </body>
+</html>

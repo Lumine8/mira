@@ -1,0 +1,23 @@
+{
+  "name": "mira-desktop",
+  "version": "0.1.0",
+  "description": "Mira, always on — the desktop companion: tray, ambient HUD, native alerts, hands-free voice.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "dev.mousebase.mira",
+    "productName": "Mira",
+    "files": ["main.js", "preload.js", "renderer/**", "assets/**"],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
