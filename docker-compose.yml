@@ -51,6 +51,7 @@ services:
       MIRA_MONEY_DENY_COMMANDS: ${MIRA_MONEY_DENY_COMMANDS:-}
       MIRA_ARCHIVE_PATH: ${MIRA_ARCHIVE_PATH:-data/conversations.md}
       MIRA_ACCESS_TOKEN: ${MIRA_ACCESS_TOKEN:-}
+      MIRA_SECRET_PHRASE: ${MIRA_SECRET_PHRASE:-the rain doesn't decide}
       # Phase 3 guest mode: anonymous visitors get a capped demo world and the
       # waitlist gates continued use. Leave off for the private founder setup.
       GUEST_MODE_ENABLED: ${GUEST_MODE_ENABLED:-false}
