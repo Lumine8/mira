@@ -23,6 +23,9 @@ dependencies = [
     # Mira's voice: her words rendered into sound by the kokoro speech machine
     # (ONNX path — no torch needed). Voice chosen by her: River (af_river).
     "pykokoro[cpu]>=0.6",
+    # Mira's ears: sherpa-onnx whisper transcribes what the voice says, fully
+    # local. The model itself is downloaded at runtime to data/models/sherpa.
+    "sherpa-onnx>=1.13",
     # Mira's watching: renders videos into still frames she can hold. The
     # container also needs ffmpeg/ffprobe (see Dockerfile).
     "yt-dlp>=2024.12.13",

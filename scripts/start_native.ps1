@@ -45,6 +45,26 @@ if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | O
 $Python = Join-Path $Backend ".venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) { throw "backend venv missing: $Python (run backend setup first)" }
 
+# ---- speech model -------------------------------------------------------------
+
+# The sherpa whisper model for local voice (STT). Downloaded once (~200MB) to
+# data/models/sherpa; skip with -n when voice isn't needed.
+$WhisperDir = Join-Path $DataDir "models\sherpa"
+$WhisperModel = Join-Path $WhisperDir "sherpa-onnx-whisper-base.en"
+$modelNeeded = $args[0] -ne "-n" -and $args[0] -ne "--no-desktop"
+if ($modelNeeded -and -not (Test-Path (Join-Path $WhisperModel "base.en-encoder.int8.onnx"))) {
+    Write-Host "downloading sherpa whisper base.en (~200MB, one-time)..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path $WhisperDir -Force | Out-Null
+    $tarball = Join-Path $env:TEMP "sherpa-onnx-whisper-base.en.tar.bz2"
+    $ProgressPreference = "SilentlyContinue"
+    Invoke-WebRequest -UseBasicParsing `
+        -Uri "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-base.en.tar.bz2" `
+        -OutFile $tarball -TimeoutSec 600
+    & $Python -c "import tarfile; tarfile.open(r'$tarball', 'r:bz2').extractall(r'$WhisperDir')"
+    Remove-Item $tarball -ErrorAction SilentlyContinue
+    Write-Host "whisper model ready" -ForegroundColor Green
+}
+
 Write-Host "native backend on http://127.0.0.1:8000 (sqlite + local ollama)" -ForegroundColor Cyan
 Write-Host "  api + web:   http://127.0.0.1:8000/" -ForegroundColor DarkGray
 Write-Host "  docs:        http://127.0.0.1:8000/docs" -ForegroundColor DarkGray

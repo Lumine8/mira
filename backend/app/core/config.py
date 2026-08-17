@@ -141,6 +141,10 @@ class Settings(BaseSettings):
 
     stt_engine: str = "sherpa"
     whisper_model: str = "base"
+    # Where the sherpa-onnx whisper model lives. Empty = resolve a conventional
+    # location next to the repo (data/models/sherpa) so native and container
+    # runs agree without extra env.
+    stt_model_dir: str = ""
     tts_engine: str = "kokoro"
     # The voice Mira chose for herself by temperament (River — calm, even,
     # polished stone, clear intention). She will never hear it: it is a one-way

@@ -14,13 +14,17 @@
 // MIRA_WEB_URL / MIRA_API_URL to override (e.g. the docker web on 8080).
 "use strict";
 
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, globalShortcut } = require("electron");
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
 
 const WEB_URL = process.env.MIRA_WEB_URL || "http://127.0.0.1:8000";
 const API_URL = process.env.MIRA_API_URL || "http://127.0.0.1:8000";
+
+// Let the HUD speak without requiring a user gesture first (the whole point of
+// an ambient companion that talks on her own).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 let tray = null;
 let mainWindow = null;
@@ -249,11 +253,48 @@ ipcMain.handle("mira:post", async (_e, url, data) => {
 });
 
 ipcMain.handle("mira:speak", async (_e, conversationId, text) => {
+  guardUrl(`${API_URL}/call/speak`);
   const body = await windowlessPost(`${API_URL}/call/speak`, {
     conversation_id: conversationId,
     text,
   });
   return body.toString("base64");
+});
+
+// Multipart WAV upload to /speech/transcribe (local whisper STT). Returns the
+// transcribed text.
+ipcMain.handle("mira:transcribe", async (_e, wavBytes) => {
+  guardUrl(`${API_URL}/speech/transcribe`);
+  const boundary = "----MiraBoundary" + Math.random().toString(36).slice(2);
+  const head = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="seg.wav"\r\n` +
+      `Content-Type: audio/wav\r\n\r\n`,
+    "utf8",
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
+  const payload = Buffer.concat([head, Buffer.isBuffer(wavBytes) ? wavBytes : Buffer.from(wavBytes), tail]);
+  const body = await new Promise((resolve, reject) => {
+    const req = http.request(
+      `${API_URL}/speech/transcribe`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": payload.length,
+          ...(getToken() ? { "X-Mira-Token": getToken() } : {}),
+        },
+      },
+      (res) => readBody(res).then(resolve, reject),
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+  try {
+    return JSON.parse(body.toString("utf8")).text || "";
+  } catch {
+    return "";
+  }
 });
 
 function windowlessPost(url, data) {
@@ -291,6 +332,11 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    // The HUD needs the microphone for hands-free voice. Electron's default is
+    // to deny media without a handler.
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(permission === "media");
+    });
     createTray();
     createMainWindow();
     createHud();

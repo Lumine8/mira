@@ -13,6 +13,7 @@ from app.api.routes import (
     porch,
     secret,
     skills,
+    speech,
     system,
     tools,
     waitlist,
@@ -32,6 +33,7 @@ api_router.include_router(mira.router)
 api_router.include_router(moderation.router)
 api_router.include_router(mote.router)
 api_router.include_router(skills.router)
+api_router.include_router(speech.router)
 api_router.include_router(documents.router)
 api_router.include_router(tools.router)
 api_router.include_router(browser.router)
