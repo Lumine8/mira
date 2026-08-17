@@ -67,6 +67,18 @@ _RUN_RE = re.compile(
 )
 _RUN_MAX_COMMAND = 1000
 
+# A structured PC-control intent Mira proposes, e.g.
+#   [[control|open|Spotify|she wants music playing]]
+#   [[control|volume_up||lower the volume]]
+# Unlike [[run]], the action is a whitelisted control (open/volume/brightness/
+# media/screenshot/lock) with a pinned safe implementation — the model can never
+# inject command text. Still runs only after the voice approves it.
+_CONTROL_RE = re.compile(
+    r"\[\[\s*control\s*\|(?P<action>[^\]|]+)\|(?P<target>[^\]|]*)\|(?P<reason>[^\]]*)\]\]",
+    re.DOTALL | re.IGNORECASE,
+)
+_CONTROL_MAX_TARGET = 120
+
 # A file Mira reads freely on the voice's computer, e.g.
 #   [[read|C:\Users\sanka\Downloads\notes.txt|I want to see what's in there]]
 # Reading is read-only and needs no approval — it changes nothing.
@@ -435,6 +447,32 @@ class ConversationManager:
             except Exception as exc:  # pragma: no cover - never break the reply
                 logger.warning("run proposal failed (%s): %s", command, exc)
 
+    def _propose_controls_from(self, raw: str) -> None:
+        """Extract [[control|action|target|reason]] intents Mira wrote and turn
+        each into a gated host_control PendingChange. The action is whitelisted
+        (open/volume/brightness/media/screenshot/lock) with a pinned safe
+        implementation; the host agent performs it only after approval."""
+        from host.control import ControlError, validate_control
+
+        for match in _CONTROL_RE.finditer(raw):
+            action = match.group("action").strip().lower()
+            target = match.group("target").strip()[:_CONTROL_MAX_TARGET]
+            reason = match.group("reason").strip() or f"she wants to {action} on the computer"
+            try:
+                validate_control(action, target)
+            except ControlError as exc:
+                logger.warning("control proposal ignored: %s", exc)
+                continue
+            try:
+                change = ToolService(self.db, user_id=self.user_id).propose_change(
+                    "host_control",
+                    reason,
+                    {"action": action, "target": target, "reason": reason},
+                )
+                self._proposals.append(change)
+            except Exception as exc:  # pragma: no cover - never break the reply
+                logger.warning("control proposal failed (%s): %s", action, exc)
+
     def _propose_reads_from(self, raw: str) -> None:
         """Extract [[read|path|reason]] intents Mira wrote and turn each into a
         host_read PendingChange. Reading is read-only — it needs no approval."""
@@ -684,6 +722,7 @@ class ConversationManager:
         self._propose_watches_from(raw, conversation_id)
         self._propose_selfedits_from(raw)
         self._propose_runs_from(raw)
+        self._propose_controls_from(raw)
         self._propose_reads_from(raw)
         self._propose_x_from(raw)
         self._propose_skills_from(raw)

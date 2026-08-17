@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.timeutil import aware
 from app.db.session import SessionLocal
 from app.models import Conversation, Message, MiraState, MoteSharedTime
 from app.services.broadcast import live_hub
@@ -162,6 +163,7 @@ class MoteLoop:
             .limit(1)
         ).scalar_one_or_none()
         active = last_activity(state.last_reflection_at, last_msg, last_shared)
+        active = aware(active)
         if active is None:
             return None
 

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import aware
 from app.models import Want
 
 DORMANT_BELOW = 10
@@ -133,7 +134,7 @@ class WantService:
 
         for w in self.list_active(limit=100):
             if wants_match(w.content, text):
-                hours_since = (now - w.updated_at).total_seconds() / 3600
+                hours_since = (now - aware(w.updated_at)).total_seconds() / 3600
                 if hours_since < ECHO_COOLDOWN_HOURS:
                     # An echo (the reflection re-listing an active want) does
                     # not strengthen it nor refresh its clock, so decay() keeps
@@ -164,7 +165,7 @@ class WantService:
         many wants went dormant."""
         went_dormant = 0
         for w in self.list_active(limit=100):
-            hours = (now - w.updated_at).total_seconds() / 3600
+            hours = (now - aware(w.updated_at)).total_seconds() / 3600
             if hours < 0.05:
                 continue
             w.intensity, w.tension = next_after_decay(w.intensity, w.tension, hours)

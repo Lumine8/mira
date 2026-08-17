@@ -1000,3 +1000,132 @@ def test_approve_rejects_money_domain_defense_in_depth(tmp_path) -> None:
     with pytest.raises(ToolError):
         svc.approve(201)
 
+
+def test_control_requires_valid_action(tmp_path: pytest.TempPathFactory) -> None:
+    svc = _with_settings(tmp_path)
+    with pytest.raises(ToolError):
+        svc.propose_change("host_control", "she wants it", {"action": "rm_rf", "target": ""})
+    with pytest.raises(ToolError):
+        svc.propose_change(
+            "host_control",
+            "she wants it",
+            {"action": "open", "target": "app; whoami"},
+        )
+
+
+def test_control_propose_stays_pending(tmp_path: pytest.TempPathFactory) -> None:
+    added: list = []
+
+    class FakeSession:
+        def add(self, obj) -> None:
+            added.append(obj)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 300
+
+    svc = _with_settings(tmp_path)
+    svc.db = FakeSession()
+    change = svc.propose_change(
+        "host_control", "she wants music playing", {"action": "open", "target": "Spotify", "reason": "x"}
+    )
+    assert change.kind == "host_control"
+    assert change.status == "pending"
+    assert added[0].kind == "host_control"
+    assert added[0].payload == {"action": "open", "target": "Spotify", "reason": "x"}
+
+
+def test_control_auto_approves_in_open_window(tmp_path: pytest.TempPathFactory) -> None:
+    added: list = []
+
+    class FakeSession:
+        def add(self, obj) -> None:
+            added.append(obj)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 301
+
+    svc = _with_settings(tmp_path, host_window_open=True)
+    svc.db = FakeSession()
+    change = svc.propose_change(
+        "host_control", "lower it", {"action": "volume_down", "target": "", "reason": "x"}
+    )
+    assert change.status == "approved"
+    assert change.result is None
+
+
+def test_control_stays_pending_when_window_closed(tmp_path: pytest.TempPathFactory) -> None:
+    added: list = []
+
+    class FakeSession:
+        def add(self, obj) -> None:
+            added.append(obj)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 302
+
+    svc = _with_settings(tmp_path, host_window_open=False)
+    svc.db = FakeSession()
+    svc.propose_change("host_control", "lower it", {"action": "volume_down", "target": "", "reason": "x"})
+    assert added[0].status == "pending"
+
+
+def test_control_approve_readies_for_agent(tmp_path: pytest.TempPathFactory) -> None:
+    from types import SimpleNamespace
+
+    change = SimpleNamespace(
+        id=303,
+        kind="host_control",
+        status="pending",
+        payload={"action": "lock", "target": "", "reason": "x"},
+        result="pending",
+        resolved_at=None,
+    )
+
+    class FakeSession:
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, _obj) -> None:
+            pass
+
+        def get(self, _model, cid):
+            assert cid == 303
+            return change
+
+    svc = _with_settings(tmp_path)
+    svc.db = FakeSession()
+    out = svc.approve(303)
+    assert out.status == "approved"
+    assert out.result is None
+
+
+def test_apply_host_result_accepts_control(tmp_path: pytest.TempPathFactory) -> None:
+    from app.models import PendingChange
+
+    change = PendingChange(kind="host_control", status="approved", payload={"action": "lock"})
+
+    class FakeSession:
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 304
+
+        def get(self, _model, cid):
+            assert cid == 304
+            return change
+
+    svc = _with_settings(tmp_path)
+    svc.db = FakeSession()
+    out = svc.apply_host_result(304, "lock requested")
+    assert out.result == "lock requested"
+

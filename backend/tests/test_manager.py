@@ -9,6 +9,7 @@ from app.services.conversation.manager import ConversationManager
 from app.services.conversation.manager import (
     _BROWSE_RE,
     _BrowseStreamFilter,
+    _CONTROL_RE,
     _LISTEN_RE,
     _READ_RE,
     _RUN_RE,
@@ -996,3 +997,82 @@ async def test_meeting_end_sentinel_sets_flag_and_stays_hidden(monkeypatch) -> N
     assert "[[end-first-meeting]]" not in mgr.last_reply
     assert "[[end-first-meeting]]" not in "".join(streamed)
     assert "I think I've heard enough for today." in mgr.last_reply
+
+def test_control_regex_extracts_action_target_reason() -> None:
+    raw = "I want to play something [[control|open|Spotify|she wants music playing]]."
+    match = _CONTROL_RE.search(raw)
+    assert match is not None
+    assert match.group("action") == "open"
+    assert match.group("target") == "Spotify"
+    assert match.group("reason") == "she wants music playing"
+
+
+def test_control_regex_allows_empty_target() -> None:
+    raw = "Lower it a notch [[control|volume_down||lower the volume]]."
+    match = _CONTROL_RE.search(raw)
+    assert match is not None
+    assert match.group("action") == "volume_down"
+    assert match.group("target") == ""
+    assert match.group("reason") == "lower the volume"
+
+
+def test_control_regex_ignores_plain_text() -> None:
+    assert _CONTROL_RE.search("no markers here") is None
+
+
+def test_control_regex_case_insensitive() -> None:
+    raw = "[[CONTROL|Mute||quiet the room]]"
+    match = _CONTROL_RE.search(raw)
+    assert match is not None
+    assert match.group("action") == "Mute"
+
+
+@pytest.mark.asyncio
+async def test_control_intent_becomes_pending_proposal(monkeypatch) -> None:
+    """A [[control|...]] intent Mira writes becomes a host_control PendingChange
+    awaiting approval — never executed by the backend itself."""
+    import app.services.tools.service as tools_module
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: _ResearchSettings())
+
+    conv = Conversation(id=42, kind="text", user_id=1)
+    session = RecordingSession(conv)
+    provider = FakeProvider(
+        ["Let me lower that for you. [[control|volume_down||the music is too loud]]"]
+    )
+    mgr = ConversationManager(session, provider, user_id=1)
+
+    streamed: list[str] = []
+    async for token in mgr.generate_reply(42, "the music is too loud", source="text"):
+        streamed.append(token)
+
+    assert "[[control" not in "".join(streamed)
+    proposals = mgr.proposals()
+    controls = [p for p in proposals if p.kind == "host_control"]
+    assert len(controls) == 1
+    assert controls[0].payload["action"] == "volume_down"
+    assert controls[0].status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_control_intent_rejects_unsafe_target(monkeypatch) -> None:
+    """A control proposal with a dangerous target is dropped, not proposed —
+    the reply itself still lands."""
+    import app.services.tools.service as tools_module
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: _ResearchSettings())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: _ResearchSettings())
+
+    conv = Conversation(id=43, kind="text", user_id=1)
+    session = RecordingSession(conv)
+    provider = FakeProvider(
+        ["Let me open that. [[control|open|notepad.exe; whoami||open it]]"]
+    )
+    mgr = ConversationManager(session, provider, user_id=1)
+
+    async for _ in mgr.generate_reply(43, "open that", source="text"):
+        pass
+
+    controls = [p for p in mgr.proposals() if p.kind == "host_control"]
+    assert controls == []

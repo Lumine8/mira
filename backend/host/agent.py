@@ -11,6 +11,12 @@ Kinds of action come from the API:
       read-only and needs no approval. The file's content is read here (size
       capped), logged, and posted back into her context.
 
+  host_control — structured PC-control intents Mira proposes (as
+      [[control|action|target|reason]]) and the user approves. The action is
+      from a whitelist (open/volume/brightness/media/screenshot/lock), and each
+      maps to a pinned safe implementation in control.py — the model can never
+      inject command text. Same approval gate as everything else.
+
   x_read / x_post — X actions Mira proposes (as [[x|...]]) and the user
       approves. Instead of Twitter's paid API (whose credit pool can be
       depleted), the real browser logged into the account performs them through
@@ -37,6 +43,7 @@ from pathlib import Path
 import requests
 
 from browser import BrowserXError, post_tweet, read_own_timeline
+from control import ControlError, run_control
 
 CONFIG_PATH = Path(__file__).with_name("eyes_config.json")
 LOG_PATH = Path(__file__).with_name("commands.log")
@@ -149,6 +156,11 @@ def report_result(base: str, change: dict, note: str, prefix: str = "") -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Mira's host action agent")
     parser.add_argument("--base", default=None, help="override API base URL")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="process currently pending approved actions once, then exit",
+    )
     args = parser.parse_args()
 
     base = args.base or load_base_url()
@@ -162,6 +174,8 @@ def main() -> None:
             pending = resp.json()
         except Exception as exc:  # noqa: BLE001 - API may be briefly down
             print(f"[agent] poll failed: {exc}")
+            if args.once:
+                sys.exit(1)
             time.sleep(POLL_SECONDS)
             continue
 
@@ -187,6 +201,16 @@ def main() -> None:
                 code, output = run_command(command)
                 note = output[:8000] if output else f"(exit code {code}, no output)"
                 report_result(base, change, f"exit={code}\n{note}", f" (exit {code})")
+            elif kind == "host_control":
+                action = payload.get("action", "")
+                target = payload.get("target", "") or ""
+                log_entry("CTRL", f"#{cid} ({summary}): {action} {target}".strip())
+                print(f"[agent] control #{cid}: {action} {target}".strip())
+                try:
+                    note = run_control(action, target)
+                except ControlError as exc:
+                    note = f"[control] {exc}"
+                report_result(base, change, f"{note}", " (control)")
             elif kind in ("x_read", "x_post"):
                 if kind == "x_read":
                     query = payload.get("query", "")
@@ -207,6 +231,10 @@ def main() -> None:
                 report_result(base, change, f"{note}", " (x)")
             else:
                 print(f"[agent] change #{cid} has unknown kind {kind!r}; skipping")
+
+        if args.once:
+            print("[agent] --once: done")
+            return
 
         time.sleep(POLL_SECONDS)
 

@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import aware
 from app.models import Question
 
 DEFAULT_IMPORTANCE = 50
@@ -174,7 +175,7 @@ class QuestionService:
         questions slowly fade. Returns how many questions faded to nothing."""
         faded = 0
         for q in self.list_open(limit=200):
-            ref = q.last_revisited or q.created_at
+            ref = aware(q.last_revisited or q.created_at)
             hours = (now - ref).total_seconds() / 3600
             if hours < 0.05:
                 continue

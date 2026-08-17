@@ -248,6 +248,15 @@ class ToolService:
                 raise ToolError("host_read needs a path")
             if len(path) > _MAX_HOST_READ_PATH:
                 raise ToolError(f"host_read path too long ({len(path)} > {_MAX_HOST_READ_PATH})")
+        if kind == "host_control":
+            from host.control import ControlError, validate_control
+
+            action = payload.get("action", "").strip().lower()
+            target = payload.get("target", "").strip()
+            try:
+                validate_control(action, target)
+            except ControlError as exc:
+                raise ToolError(str(exc))
         if kind == "x_read":
             if not payload.get("query", "").strip():
                 raise ToolError("x_read needs a query (what she wants to look at)")
@@ -359,6 +368,14 @@ class ToolService:
             self.db.commit()
             self.db.refresh(change)
 
+        if kind == "host_control" and get_settings().host_window_open:
+            # Same window: a whitelisted PC-control action may proceed on its
+            # own, still fully recorded. The host agent performs it and reports.
+            change.status = "approved"
+            change.resolved_at = datetime.now(UTC)
+            self.db.commit()
+            self.db.refresh(change)
+
         if kind == "research_query" and get_settings().research_window_open:
             # Searching the public scientific record is read-only — it changes
             # nothing, so it needs no approval. The run is still fully recorded
@@ -406,14 +423,15 @@ class ToolService:
 
     def host_pending(self, limit: int = 10) -> list[PendingChange]:
         """Approved host actions waiting for the host agent to do them:
-        commands, file reads, and X actions done through the real browser."""
+        commands, file reads, PC-control intents, and X actions done through
+        the real browser."""
         return list(
             self.db.execute(
                 select(PendingChange)
                 .where(
                     PendingChange.user_id == self.user_id,
                     PendingChange.kind.in_(
-                        ["host_command", "host_read", "x_read", "x_post"]
+                        ["host_command", "host_read", "host_control", "x_read", "x_post"]
                     ),
                     PendingChange.status == "approved",
                     PendingChange.result.is_(None),
@@ -435,7 +453,7 @@ class ToolService:
     def apply_host_result(self, change_id: int, result: str) -> PendingChange:
         """Record what an approved host action returned when the host agent did it."""
         change = self._owned(change_id)
-        if change.kind not in ("host_command", "host_read", "x_read", "x_post"):
+        if change.kind not in ("host_command", "host_read", "host_control", "x_read", "x_post"):
             raise ToolError(f"change #{change_id} is not a host action")
         change.result = result[:_MAX_HOST_RESULT]
         change.resolved_at = datetime.now(UTC)
@@ -488,6 +506,11 @@ class ToolService:
             # The command runs on the voice's machine, not in this container.
             # Approval only readies it; the host agent polls host_pending(),
             # executes it there, and reports back via apply_host_result().
+            change.result = None
+        elif change.kind == "host_control":
+            # A whitelisted PC-control action runs on the voice's machine, not
+            # in this container. Approval readies it; the host agent performs it
+            # and reports back via apply_host_result().
             change.result = None
         elif change.kind in ("x_read", "x_post"):
             # X actions happen through the real browser on the voice's machine

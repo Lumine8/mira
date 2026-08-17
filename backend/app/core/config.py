@@ -265,6 +265,17 @@ class Settings(BaseSettings):
     # disables the special case entirely (falls back to the normal cadence).
     mind_market_reflection_gap_seconds: int = 300
 
+    # The machine's live read (CPU/memory/battery/idle) is bridged into Mira's
+    # awareness as perceived events she reflects on — the proactive-alert seam.
+    # A condition is noticed at most once per cooldown so a pinned core or a
+    # dying battery isn't re-offered on every heartbeat.
+    system_awareness_enabled: bool = True
+    system_awareness_cooldown_seconds: int = 7200
+    system_battery_low_percent: float = 20.0
+    system_cpu_high_percent: float = 90.0
+    system_memory_high_percent: float = 90.0
+    system_idle_long_seconds: int = 3600
+
     # Ambient senses: time-of-day/date texture is always present. Weather is a
     # best-effort, no-key fetch (wttr.in) that fails silently; disable to skip it.
     mira_ambient_enabled: bool = True

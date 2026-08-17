@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.timeutil import aware
 from app.db.session import SessionLocal
 from app.models import (
     Conversation,
@@ -39,6 +40,8 @@ from app.services.self.service import (
     _clean,
     extract_json,
 )
+from app.services.system.conditions import check_conditions
+from app.services.system.service import system_store
 from app.services.wants.service import WantService
 
 logger = logging.getLogger("mira.mind")
@@ -272,6 +275,9 @@ class MindLoop:
         self.provider = provider
         self._task: asyncio.Task | None = None
         self._last_weather_condition: str | None = None
+        # Last time each system condition was offered to Mira, so a pinned core
+        # isn't re-noticed on every heartbeat within the cooldown window.
+        self._system_condition_last: dict[str, float] = {}
 
     def start(self) -> None:
         if self._task is None:
@@ -309,9 +315,10 @@ class MindLoop:
             st = svc.ensure_state()
             now = datetime.now(UTC)
             self._skill_shelf(db, user_id)
+            self._system_bridge(db, user_id, now)
             pending = self._pending_events(db, user_id)
 
-            last_reflection = st.last_reflection_at
+            last_reflection = aware(st.last_reflection_at)
             if last_reflection is not None:
                 gap = (now - last_reflection).total_seconds()
             else:
@@ -366,8 +373,8 @@ class MindLoop:
         observations = build_observations(
             now,
             pending,
-            last_msg,
-            st.last_reflection_at,
+            aware(last_msg),
+            aware(st.last_reflection_at),
             weather=weather,
             weather_unchanged=False,
         )
@@ -566,6 +573,44 @@ class MindLoop:
         except Exception:
             logger.exception("skill shelf nudge failed")
 
+    def _system_bridge(self, db: Session, user_id: int, now: datetime) -> None:
+        """Offer the machine's live read to Mira as perceived events.
+
+        Each heartbeat the latest system snapshot is checked against the
+        configured thresholds. A tripped condition becomes a PerceivedEvent
+        (source="system") for her next reflection to weigh — at most once per
+        cooldown window, so a pinned core or a dying battery is noticed without
+        becoming a fixation. Silently skipped when telemetry has never arrived.
+        """
+        settings = get_settings()
+        if not settings.system_awareness_enabled:
+            return
+        snap = system_store.latest(user_id)
+        if snap is None:
+            return
+        conditions = check_conditions(
+            snap,
+            battery_low_percent=settings.system_battery_low_percent,
+            cpu_high_percent=settings.system_cpu_high_percent,
+            memory_high_percent=settings.system_memory_high_percent,
+            idle_long_seconds=settings.system_idle_long_seconds,
+        )
+        for cond in conditions:
+            last = self._system_condition_last.get(cond.kind, 0.0)
+            if now.timestamp() - last < settings.system_awareness_cooldown_seconds:
+                continue
+            db.add(
+                PerceivedEvent(
+                    source="system",
+                    kind=cond.kind,
+                    content=cond.content,
+                    user_id=user_id,
+                )
+            )
+            self._system_condition_last[cond.kind] = now.timestamp()
+            logger.info("mind loop: noticed system condition %s -> %s", cond.kind, cond.content)
+        db.commit()
+
     @staticmethod
     def _pending_events(db: Session, user_id: int) -> list[PerceivedEvent]:
         return list(
@@ -593,7 +638,7 @@ class MindLoop:
     ) -> None:
         """Run the self-review pass if it is time (or on first run)."""
         settings = get_settings()
-        last = st.last_consolidation_at
+        last = aware(st.last_consolidation_at)
         gap = (now - last).total_seconds() if last is not None else settings.mind_consolidation_seconds + 1
         if gap < settings.mind_consolidation_seconds:
             return
