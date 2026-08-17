@@ -8,6 +8,10 @@
 // shared access token — read from MIRA_ACCESS_TOKEN (env), or the repo .env, or
 // a token pasted into the HUD's settings (persisted to userData). The main
 // window loads the web app with ?token= so Mira is already home.
+//
+// Native single-port mode: the backend serves both the web app and the API on
+// one port (8000), so WEB_URL and API_URL default to the same origin. Set
+// MIRA_WEB_URL / MIRA_API_URL to override (e.g. the docker web on 8080).
 "use strict";
 
 const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, globalShortcut } = require("electron");
@@ -15,8 +19,8 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 
-const WEB_URL = process.env.MIRA_WEB_URL || "http://localhost:8080";
-const API_URL = process.env.MIRA_API_URL || "http://localhost:8000";
+const WEB_URL = process.env.MIRA_WEB_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.MIRA_API_URL || "http://127.0.0.1:8000";
 
 let tray = null;
 let mainWindow = null;
@@ -88,7 +92,37 @@ function createMainWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   mainWindow.loadURL(withToken(WEB_URL));
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc) => {
+    // Backend not up yet (native mode): show a warm waiting page with a retry
+    // instead of a frozen blank window.
+    if (code === -3) return; // aborted by a newer navigation, ignore
+    mainWindow.loadURL(
+      "data:text/html;charset=utf-8," +
+        encodeURIComponent(
+          `<!doctype html><html><head><meta charset="utf-8"><style>` +
+            `body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;` +
+            `background:#0c0a11;color:#e8d9c4;font-family:Georgia,serif;}` +
+            `.w{text-align:center}` +
+            `.o{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;` +
+            `background:radial-gradient(circle at 35% 30%,#f3d9a4,#d2a862 60%,#8a5f2e);` +
+            `animation:b 3s ease-in-out infinite}` +
+            `@keyframes b{0%,100%{opacity:.55}50%{opacity:1}}` +
+            `h1{font-size:22px;font-weight:400;margin:0 0 8px}` +
+            `p{color:#a89a86;font-size:13px;margin:0 0 16px;font-family:system-ui,sans-serif}` +
+            `button{background:#2a241c;color:#e8d9c4;border:1px solid #4a3d2e;border-radius:8px;` +
+            `padding:8px 18px;font-size:13px;cursor:pointer;font-family:system-ui,sans-serif}` +
+            `button:hover{background:#3a3024}</style></head><body>` +
+            `<div class="w"><div class="o"></div><h1>waiting for Mira</h1>` +
+            `<p>the backend isn't reachable at ${escapeHtml(WEB_URL)} yet.<br>start it with scripts/start_native.ps1</p>` +
+            `<button onclick="location.reload()">try again</button></div></body></html>`,
+        ),
+    );
+  });
   mainWindow.on("closed", () => (mainWindow = null));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function createHud() {

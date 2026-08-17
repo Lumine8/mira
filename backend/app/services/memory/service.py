@@ -46,6 +46,8 @@ class MemoryService:
     async def recall(self, query: str, *, k: int = 5) -> list[dict]:
         """Return the ``k`` memories most relevant to ``query``."""
         vec = await self.provider.embed(query)
+        if get_settings().is_sqlite:
+            return self._recall_sqlite(vec, k=k)
         rows = self.db.execute(
             select(Memory)
             .join(MemoryEmbedding, MemoryEmbedding.memory_id == Memory.id)
@@ -60,6 +62,21 @@ class MemoryService:
                 "valence": m.valence,
             }
             for m in rows
+        ]
+
+    def _recall_sqlite(self, vec: list[float], *, k: int = 5) -> list[dict]:
+        """sqlite has no vector index; load this user's embeddings and rank by
+        cosine in Python. Fine at companion scale (hundreds of memories)."""
+        rows = self.db.execute(
+            select(Memory, MemoryEmbedding.embedding)
+            .join(MemoryEmbedding, MemoryEmbedding.memory_id == Memory.id)
+            .where(Memory.user_id == self.user_id)
+        ).all()
+        scored = [(_cos(vec, emb), mem) for mem, emb in rows]
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [
+            {"content": mem.content, "type": mem.type, "valence": mem.valence}
+            for _, mem in scored[:k]
         ]
 
     async def store(

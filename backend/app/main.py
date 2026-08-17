@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
+from app.db.base import Base
 from app.db.session import engine
 from app.deps import get_provider
 from app.services.mind.service import MindLoop
@@ -24,6 +26,14 @@ mote = MoteLoop()
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     try:
+        if settings.is_sqlite:
+            # The native no-Docker setup: sqlite has no alembic migration chain
+            # (they target postgres), so the schema is created directly. Safe
+            # on every boot: create_all only adds missing tables.
+            import app.models  # noqa: F401  (register models on Base.metadata)
+
+            Base.metadata.create_all(engine)
+            logger.info("sqlite schema ready")
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("database connection ok")
@@ -64,7 +74,40 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # The API lives at the root (what the desktop companion, host scripts, and
+    # the tunnel's nginx already use) AND under /api — what the web bundle
+    # fetches (nginx used to strip that prefix). Serving both means the backend
+    # can stand alone on one port with no proxy in front.
     app.include_router(api_router)
+    if settings.is_sqlite:
+        # Native single-port mode: the web bundle fetches /api/... (in docker
+        # the nginx proxy stripped that prefix). Alias the router so the
+        # backend can stand alone on one port with no proxy in front.
+        app.include_router(api_router, prefix="/api")
+
+    if not settings.is_sqlite:
+        return app
+
+    # Native single-port mode: serve the built web app from this process so
+    # there is no separate web container. The SPA's deep links fall back to
+    # index.html; unknown /api paths stay 404s rather than returning the page.
+    from fastapi.responses import FileResponse, JSONResponse, Response
+    from pathlib import Path
+
+    static_dir = Path(os.environ.get("MIRA_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str) -> Response:
+        if path.startswith("api/") or path.startswith("ws/"):
+            return JSONResponse({"detail": "not found"}, status_code=404)
+        target = (static_dir / path).resolve()
+        if static_dir.resolve() in target.parents and target.is_file():
+            return FileResponse(target)
+        index = static_dir / "index.html"
+        if index.is_file():
+            return FileResponse(index)
+        return JSONResponse({"detail": "web dist not built"}, status_code=404)
+
     return app
 
 

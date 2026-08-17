@@ -55,6 +55,9 @@ start.ps1
 stop.ps1
 *.local
 
+# native (no-docker) runtime state: sqlite db + api pid
+data/
+
 # ad-hoc / one-off scripts that shouldn't ship with the deployment
 backend/date_test*.py
 backend/drive_ws.py

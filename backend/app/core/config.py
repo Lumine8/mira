@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     postgres_host: str = "postgres"
     postgres_port: int = 5432
 
+    # Full SQLAlchemy URL override. When set (e.g. sqlite:///data/mira.db for the
+    # native no-Docker setup) it wins over the postgres_* fields above. Empty =
+    # the docker-compose postgres.
+    database_url_override: str = ""
+
     ollama_host: str = "http://localhost:11434"
     ollama_llm_model: str = "gemma4:e4b-it-qat"
     ollama_embed_model: str = "nomic-embed-text"
@@ -341,7 +346,13 @@ class Settings(BaseSettings):
         return [o.strip() for o in v.split(",") if o.strip()]
 
     @property
+    def is_sqlite(self) -> bool:
+        return self.database_url.startswith("sqlite")
+
+    @property
     def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"

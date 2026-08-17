@@ -14,6 +14,10 @@ EMBEDDING_DIM = 768  # nomic-embed-text
 # whole model set can be created in-memory.
 JSONB_PORTABLE = JSONB().with_variant(JSON(), "sqlite")
 
+# Embeddings: pgvector's Vector column on Postgres, a plain JSON float list on
+# sqlite (the no-Docker native setup). Similarity is computed in Python there.
+VECTOR_PORTABLE = Vector(EMBEDDING_DIM).with_variant(JSON(), "sqlite")
+
 
 class Memory(Base):
     __tablename__ = "memories"
@@ -39,7 +43,7 @@ class MemoryEmbedding(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id"))
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+    embedding: Mapped[list[float]] = mapped_column(VECTOR_PORTABLE)
     model: Mapped[str] = mapped_column(String(64), default="nomic-embed-text")
 
     memory: Mapped["Memory"] = relationship(back_populates="embeddings")
