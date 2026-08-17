@@ -9,6 +9,8 @@ import MessageBubble from "../messages/MessageBubble";
 interface PorchConversationProps {
   onOpenSignIn: () => void;
   onRequestSeat: () => void;
+  /** Step from the doorstep to the invitation: the first meeting. */
+  onMeeting: () => void;
 }
 
 type Phase = "loading" | "chat" | "deciding" | "seat" | "closed";
@@ -17,7 +19,7 @@ type Phase = "loading" | "chat" | "deciding" | "seat" | "closed";
  *  stranger at the door. When it runs out of room, Mira gives her honest
  *  verdict — the seat is only offered when she liked the visit. The moments
  *  she liked or did not like are hers alone and are never shown. */
-export default function PorchConversation({ onOpenSignIn, onRequestSeat }: PorchConversationProps) {
+export default function PorchConversation({ onOpenSignIn, onRequestSeat, onMeeting }: PorchConversationProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState("");
@@ -141,6 +143,9 @@ export default function PorchConversation({ onOpenSignIn, onRequestSeat }: Porch
           <span className={`porch__dot ${connected ? "porch__dot--on" : ""}`} aria-hidden />
           <span className="porch__who">{who}</span>
         </div>
+        <button className="porch__invite" type="button" onClick={onMeeting}>
+          the first meeting
+        </button>
         <button className="porch__invite" type="button" onClick={onOpenSignIn}>
           already have an invitation? sign in
         </button>

@@ -33,7 +33,7 @@ export default function AuthScreen({
 }: AuthScreenProps) {
   const [token, setToken] = useState("");
   const [errorState, setErrorState] = useState<string | null>(error);
-  const [view, setView] = useState<View>("entry");
+  const [view, setView] = useState<View>("porch");
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [emailCode, setEmailCode] = useState("");
@@ -158,7 +158,7 @@ export default function AuthScreen({
           conversationId={conversationId}
           opening={opening}
           onEnded={() => setView("outcome")}
-          onLeave={() => setView("entry")}
+          onLeave={() => setView("porch")}
         />
       )}
 
@@ -166,7 +166,7 @@ export default function AuthScreen({
         <MeetingOutcome
           email={email}
           onSignIn={onSignIn}
-          onLeave={() => setView("entry")}
+          onLeave={() => setView("porch")}
           onPorch={() => setView("porch")}
         />
       )}
@@ -176,6 +176,7 @@ export default function AuthScreen({
           <PorchConversation
             onOpenSignIn={() => setView("start")}
             onRequestSeat={() => setWaitlistOpen(true)}
+            onMeeting={() => setView("entry")}
           />
         </div>
       )}
