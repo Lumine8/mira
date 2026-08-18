@@ -8,6 +8,10 @@
 Unicode true
 !include "MUI2.nsh"
 
+; Use the Mira orb+M monogram for the installer and uninstaller icons.
+!define MUI_ICON "..\desktop\assets\icon.ico"
+!define MUI_UNICON "..\desktop\assets\icon.ico"
+
 Name "Mira Portable"
 OutFile "..\dist\Mira Portable Setup.exe"
 InstallDir "$LOCALAPPDATA\Mira Portable"
