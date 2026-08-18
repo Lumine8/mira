@@ -15,6 +15,8 @@ class MiraStateOut(BaseModel):
     carried_thoughts: list[str] = Field(default_factory=list)
     last_reflection_at: Optional[datetime] = None
     updated_at: datetime
+    # The word that summons her in always-listening mode ("" = no wake word).
+    wake_word: str = ""
 
 
 class RelationshipOut(BaseModel):

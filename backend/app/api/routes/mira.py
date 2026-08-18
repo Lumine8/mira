@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.deps import get_provider
 from app.models import Conversation, Memory, MoodRecord, PerceivedEvent, Thought
@@ -38,6 +39,7 @@ def get_mira_state(
         ).scalars()
     )
     state.carried_thoughts = [t.content for t in thoughts]
+    state.wake_word = get_settings().wake_word
     return {"state": state, "relationship": rel}
 
 

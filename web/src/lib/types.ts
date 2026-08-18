@@ -224,6 +224,7 @@ export interface MiraState {
   carried_thoughts: string[];
   last_reflection_at: string | null;
   updated_at: string;
+  wake_word: string;
 }
 
 export interface Relationship {

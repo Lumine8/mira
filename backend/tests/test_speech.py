@@ -88,3 +88,38 @@ def test_speak_route_allows_call_conversation() -> None:
         assert len(resp.body) > 0
     finally:
         calls_module.synthesize = original
+
+
+def test_tts_route_speaks_outside_a_call() -> None:
+    """The voice-output bridge: /speech/tts renders her words even though no
+    call conversation exists — the proactive-announcement path."""
+    import app.api.routes.speech as speech_module
+
+    class FakeSettings:
+        tts_enabled = True
+
+    speech_module.get_settings = lambda: FakeSettings()
+
+    original = speech_module.synthesize
+    speech_module.synthesize = lambda text: _to_wav(
+        np.array([0.1, -0.1], dtype=np.float32), sample_rate=24000
+    )
+    try:
+        resp = speech_module.tts_audio(speech_module.TtsRequest(text="the battery is low"), _user_id=1)
+        assert resp.media_type == "audio/wav"
+        assert len(resp.body) > 0
+    finally:
+        speech_module.synthesize = original
+
+
+def test_tts_route_refuses_when_disabled() -> None:
+    import app.api.routes.speech as speech_module
+
+    class FakeSettings:
+        tts_enabled = False
+
+    speech_module.get_settings = lambda: FakeSettings()
+
+    with pytest.raises(Exception) as exc_info:
+        speech_module.tts_audio(speech_module.TtsRequest(text="hello"), _user_id=1)
+    assert "voice is disabled" in str(exc_info.value)

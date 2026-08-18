@@ -153,6 +153,15 @@ class Settings(BaseSettings):
     # True = her replies are spoken aloud only in kind="call" conversations;
     # text conversations stay quiet. This is the boundary she chose.
     tts_enabled: bool = True
+    # The word that summons her in always-listening mode. When set, the HUD
+    # ignores every utterance that doesn't start with it (e.g. "mira, ...").
+    # Empty string = no wake word; every utterance is heard. Lowercased match.
+    wake_word: str = "mira"
+    # True = her self-initiated messages (the mind loop's "I want to tell you"
+    # alerts) are also spoken aloud through the speakers, not just shown on the
+    # HUD. The voice-output bridge beyond calls. She chose the call boundary for
+    # replies; this is her reaching out on her own.
+    tts_announce_self_messages: bool = True
 
     scheduler_enabled: bool = True
     self_model_enabled: bool = True

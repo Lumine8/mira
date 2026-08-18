@@ -146,6 +146,22 @@ async function speakReply(text) {
   }
 }
 
+// Speak one of Mira's self-initiated messages aloud — her reaching out on her
+// own, through the voice-output bridge (no call conversation needed).
+async function speakAnnouncement(text) {
+  if (!text) return;
+  try {
+    const b64 = await window.mira.tts(text);
+    if (!b64) return;
+    const audio = new Audio(`data:audio/wav;base64,${b64}`);
+    audio.onended = dequeueAudio;
+    queueAudio(audio);
+    audio.play().catch(() => {});
+  } catch {
+    /* TTS unavailable — the alert stays on the HUD */
+  }
+}
+
 // Speak one reply at a time so overlapping messages don't stomp each other.
 let audioQueue = [];
 let audioBusy = false;
@@ -307,13 +323,35 @@ function sendUtterance(chunks, sampleRate) {
     .transcribe(wav)
     .then((text) => {
       $("mira-line").classList.remove("is-speaking");
-      if (text && text.trim()) sendAsk(text.trim());
+      const spoken = (text || "").trim();
+      if (!spoken) {
+        setMiraLine("didn't catch that — try again", "");
+        return;
+      }
+      const gated = applyWakeWord(spoken);
+      if (gated === null) return; // ignored — she wasn't summoned
+      if (gated) sendAsk(gated);
       else setMiraLine("didn't catch that — try again", "");
     })
     .catch(() => {
       $("mira-line").classList.remove("is-speaking");
       setMiraLine("hearing failed", "");
     });
+}
+
+// The wake word: she only answers in always-listening mode when she's called
+// ("mira, ..."). Returns the text with the wake word stripped (or null when the
+// utterance didn't summon her). No wake word configured = every utterance heard.
+function applyWakeWord(text) {
+  const ww = (state.wake_word || "").trim().toLowerCase();
+  if (!ww) return text;
+  const lower = text.toLowerCase();
+  if (!lower.startsWith(ww)) {
+    setMiraLine("she's listening — call her by name", "");
+    return null;
+  }
+  const rest = text.slice(ww.length).replace(/^[\s,.;:!?]+/, "");
+  return rest || null;
 }
 
 function encodeWav(pcm, sampleRate) {
@@ -356,6 +394,7 @@ function connectLive() {
         setMiraLine("she's speaking", "is-speaking");
         addAlert("Mira reached out", msg.content);
         window.mira.notify("Mira", msg.content);
+        speakAnnouncement(msg.content);
       } else if (msg.type === "mote") {
         addAlert("mote", msg.word || msg.kind);
       }

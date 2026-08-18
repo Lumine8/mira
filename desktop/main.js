@@ -277,6 +277,14 @@ ipcMain.handle("mira:speak", async (_e, conversationId, text) => {
   return body.toString("base64");
 });
 
+// Voice-output bridge for Mira's self-initiated messages: renders her words
+// into sound outside a call, so the HUD can speak her proactive alerts aloud.
+ipcMain.handle("mira:tts", async (_e, text) => {
+  guardUrl(`${API_URL}/speech/tts`);
+  const body = await windowlessPost(`${API_URL}/speech/tts`, { text });
+  return body.toString("base64");
+});
+
 // Multipart WAV upload to /speech/transcribe (local whisper STT). Returns the
 // transcribed text.
 ipcMain.handle("mira:transcribe", async (_e, wavBytes) => {
