@@ -18,6 +18,7 @@ const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, globalShortcut, s
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const { MiraStack, hasPortableRuntime } = require("./supervisor");
 
 const WEB_URL = process.env.MIRA_WEB_URL || "http://127.0.0.1:8000";
 const API_URL = process.env.MIRA_API_URL || "http://127.0.0.1:8000";
@@ -30,6 +31,7 @@ let tray = null;
 let mainWindow = null;
 let hudWindow = null;
 let hudVisible = true;
+let stack = null;
 
 // ---- config: token + urls, persisted so pasting a token once sticks ---------
 
@@ -117,7 +119,11 @@ function createMainWindow() {
             `padding:8px 18px;font-size:13px;cursor:pointer;font-family:system-ui,sans-serif}` +
             `button:hover{background:#3a3024}</style></head><body>` +
             `<div class="w"><div class="o"></div><h1>waiting for Mira</h1>` +
-            `<p>the backend isn't reachable at ${escapeHtml(WEB_URL)} yet.<br>start it with scripts/start_native.ps1</p>` +
+            `<p>the backend isn't reachable at ${escapeHtml(WEB_URL)} yet.<br>` +
+            (hasPortableRuntime()
+              ? `the stack is starting — give it a moment.`
+              : `start it with scripts/start_native.ps1`) +
+            `</p>` +
             `<button onclick="location.reload()">try again</button></div></body></html>`,
         ),
     );
@@ -196,6 +202,13 @@ ipcMain.handle("mira:notify", (_e, { title, body }) => notify(title || "Mira", b
 ipcMain.handle("mira:toggle-hud", () => toggleHud());
 ipcMain.handle("mira:open-main", () => (mainWindow ? mainWindow.show() : createMainWindow()));
 ipcMain.handle("mira:quit", () => app.quit());
+ipcMain.handle("mira:stack-status", () => (stack ? stack.status() : null));
+ipcMain.handle("mira:stack-start", async () => {
+  startStack();
+  if (!stack) return null;
+  await stack.start().catch((err) => console.error("stack start failed:", err));
+  return stack.status();
+});
 
 // JSON GET / POST / speak helpers — CORS-free routes for the file:// renderer.
 function guardUrl(url) {
@@ -318,6 +331,33 @@ function windowlessPost(url, data) {
   });
 }
 
+// ---- stack supervision -------------------------------------------------------
+// In packaged/portable mode the companion owns the whole stack (backend +
+// ollama + host agent). In dev mode it only self-boots when asked, so a bare
+// `npm start` against an already-running backend behaves exactly as before.
+const shouldSupervise = () => {
+  if (process.env.MIRA_SUPERVISE === "1") return true;
+  if (process.env.MIRA_SUPERVISE === "0") return false;
+  if (hasPortableRuntime()) return true;
+  return false;
+};
+
+function startStack() {
+  if (stack || !shouldSupervise()) return;
+  stack = new MiraStack();
+  stack.onChange = (s) => {
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send("mira:stack", s);
+  };
+  stack.start().catch((err) => console.error("stack start failed:", err));
+}
+
+function stopStack() {
+  if (stack) {
+    stack.stop();
+    stack = null;
+  }
+}
+
 // ---- lifecycle -----------------------------------------------------------------
 
 const gotLock = app.requestSingleInstanceLock();
@@ -342,6 +382,7 @@ if (!gotLock) {
     createHud();
     globalShortcut.register("CommandOrControl+Shift+M", toggleHud);
     app.on("activate", () => (mainWindow ? mainWindow.show() : createMainWindow()));
+    startStack();
   });
 }
 
@@ -349,4 +390,7 @@ app.on("window-all-closed", () => {
   // Keep running in the tray — that's the point of the companion.
 });
 
-app.on("before-quit", () => globalShortcut.unregisterAll());
+app.on("before-quit", () => {
+  globalShortcut.unregisterAll();
+  stopStack();
+});

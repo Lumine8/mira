@@ -15,7 +15,7 @@
   "build": {
     "appId": "dev.mousebase.mira",
     "productName": "Mira",
-    "files": ["main.js", "preload.js", "renderer/**", "assets/**"],
+    "files": ["main.js", "preload.js", "supervisor.js", "renderer/**", "assets/**"],
     "win": {
       "target": "nsis"
     }
