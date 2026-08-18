@@ -109,9 +109,12 @@ function createMainWindow() {
             `body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;` +
             `background:#0c0a11;color:#e8d9c4;font-family:Georgia,serif;}` +
             `.w{text-align:center}` +
-            `.o{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;` +
-            `background:radial-gradient(circle at 35% 30%,#f3d9a4,#d2a862 60%,#8a5f2e);` +
+            `.o{width:64px;height:64px;margin:0 auto 18px;border-radius:14px;position:relative;` +
+            `background:radial-gradient(circle at 50% 50%,#b9a7ff,#7c5cff 60%,#3a2a6b);` +
+            `box-shadow:0 0 24px rgba(124,92,255,.45);` +
             `animation:b 3s ease-in-out infinite}` +
+            `.o::after{content:"M";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;` +
+            `font:700 26px system-ui,sans-serif;color:#f2ecff;letter-spacing:-2px}` +
             `@keyframes b{0%,100%{opacity:.55}50%{opacity:1}}` +
             `h1{font-size:22px;font-weight:400;margin:0 0 8px}` +
             `p{color:#a89a86;font-size:13px;margin:0 0 16px;font-family:system-ui,sans-serif}` +

@@ -58,12 +58,12 @@ if (-not $skipDesktop) {
 if (-not (Test-Path (Join-Path $winUnpacked "Mira.exe"))) {
     throw "desktop build missing: $winUnpacked\Mira.exe (remove -SkipDesktop)"
 }
-# Copy the app contents into the portable root. Only when freshly built — on a
-# -SkipDesktop re-run the app is already there (avoids a duplicate win-unpacked\).
-if (-not (Test-Path (Join-Path $Portable "Mira.exe"))) {
-    Copy-Item "$winUnpacked\*" $Portable -Recurse -Force
-    Ok "Mira.exe + resources copied"
-} else { Ok "Mira.exe already present (reuse)" }
+# Mirror the app contents into the portable root (robocopy /IS /IT refreshes
+# changed electron files while leaving runtime/ and data/ alone). Always runs so
+# a rebuilt app (new icon, changed renderer) replaces the stale copy.
+robocopy $winUnpacked $Portable /E /XD runtime data /IS /IT | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy desktop app failed (exit $LASTEXITCODE)" }
+Ok "Mira.exe + resources mirrored (changed files refreshed)"
 
 # ---- 2. python runtime -----------------------------------------------------------
 Step "python runtime ($PyVersion embeddable)"

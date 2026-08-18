@@ -59,8 +59,8 @@ body {
   flex: none;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 30%, rgba(224, 184, 120, 0.95), rgba(210, 162, 94, 0.6) 45%, rgba(160, 110, 60, 0.35) 100%);
-  box-shadow: 0 0 18px rgba(210, 162, 94, 0.4);
+    radial-gradient(circle at 35% 30%, rgba(185, 167, 255, 0.95), rgba(124, 92, 255, 0.6) 45%, rgba(80, 55, 160, 0.35) 100%);
+  box-shadow: 0 0 18px rgba(124, 92, 255, 0.4);
   animation: breathe 9s ease-in-out infinite;
 }
 
