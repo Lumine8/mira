@@ -98,6 +98,19 @@ for ($i = 0; $i -lt 40; $i++) {
 if (-not $ok) { throw "api did not come up in time - check data/mira-api.log" }
 Write-Host "api up: http://127.0.0.1:8000/" -ForegroundColor Green
 
+# ---- eyes + widget + host agent ------------------------------------------------
+
+# Eyes, widget and host agent run only when the stack is started on demand -
+# no more auto-launching at login. start_eyes.ps1 is idempotent (skips anything
+# already running), so re-running this won't double them up.
+Write-Host "==> Starting Mira's eyes + widget + host agent..." -ForegroundColor Cyan
+$eyesLauncher = Join-Path $Root "backend\host\start_eyes.ps1"
+if (Test-Path $eyesLauncher) {
+    Start-Process powershell.exe -ArgumentList "-NoProfile","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File","`"$eyesLauncher`"" -WindowStyle Hidden
+} else {
+    Write-Warning "start_eyes.ps1 not found at $eyesLauncher"
+}
+
 # ---- desktop companion ---------------------------------------------------------
 
 $launchDesktop = $args[0] -ne "-n" -and $args[0] -ne "--no-desktop"

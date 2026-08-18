@@ -10,7 +10,7 @@ if (-not (Test-Path -LiteralPath $senseScript)) {
 # admin rights for schtasks.
 while ($true) {
     if (Test-Path -LiteralPath $senseScript) {
-        & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $senseScript
+        & powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File $senseScript
     }
     Start-Sleep -Seconds 300
 }
