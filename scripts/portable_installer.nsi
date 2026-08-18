@@ -13,6 +13,10 @@ OutFile "..\dist\Mira Portable Setup.exe"
 InstallDir "$LOCALAPPDATA\Mira Portable"
 RequestExecutionLevel user
 
+; Solid LZMA: best ratio for a ~1.3GB bundle (site-packages + onnx models
+; compress well). Slower to build, smaller to ship.
+SetCompressor /SOLID lzma
+
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -24,5 +28,4 @@ Section "Mira"
   SetOutPath "$INSTDIR"
   File /r "..\dist\mira-portable\*"
   CreateShortcut "$DESKTOP\Mira.lnk" "$INSTDIR\Mira.exe"
-  CreateDirectory "$LOCALAPPDATA\Mira Portable"
 SectionEnd

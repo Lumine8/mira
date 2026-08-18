@@ -171,17 +171,23 @@ else {
     } else { Write-Host "ollama not found in $ollamaExe - install Ollama on the build machine to bundle it" -ForegroundColor Yellow }
 }
 
-# ---- 7. NSIS installer (optional, needs makensis on PATH) ---------------------------------
+# ---- 7. NSIS installer (optional) -----------------------------------------------
 if (-not $skipInstall) {
     Step "installer"
     $nsis = Get-Command makensis -ErrorAction SilentlyContinue
+    if (-not $nsis) {
+        # winget's NSIS installs here but isn't on PATH
+        $candidate = "C:\Program Files (x86)\NSIS\makensis.exe"
+        if (Test-Path $candidate) { $nsis = [pscustomobject]@{ Source = $candidate } }
+    }
     if ($nsis) {
         $scriptFile = Join-Path $PSScriptRoot "portable_installer.nsi"
         if (Test-Path $scriptFile) {
             & $nsis.Source $scriptFile | Out-Host
+            Ok "installer built: dist\Mira Portable Setup.exe"
         } else { Write-Host "portable_installer.nsi not found - skipping installer" -ForegroundColor Yellow }
     } else {
-        Write-Host "makensis not on PATH - the portable folder is the deliverable; installer skipped" -ForegroundColor Yellow
+        Write-Host "makensis not found (install NSIS: winget install NSIS.NSIS) - portable folder only" -ForegroundColor Yellow
     }
 }
 
