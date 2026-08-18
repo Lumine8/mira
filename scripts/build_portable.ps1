@@ -119,6 +119,16 @@ Get-ChildItem $Backend -Recurse -Force -ErrorAction SilentlyContinue |
 # robocopy (not Copy-Item) so /XD reliably excludes .venv, __pycache__, tests, etc.
 robocopy $Backend $BackendRuntime /E /XD .venv __pycache__ data tests /XF *.db *.log | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy backend failed (exit $LASTEXITCODE)" }
+# The repo .env (token, Gemini key, provider, model names) lives at the repo root,
+# not in backend/. The supervisor reads runtime/backend/.env in portable mode, so
+# carry it over — without it the bundled app defaults to ollama (not bundled) and
+# runs unauthenticated.
+if (Test-Path (Join-Path $Root ".env")) {
+    Copy-Item (Join-Path $Root ".env") (Join-Path $BackendRuntime ".env") -Force
+    Ok "bundled .env (token + provider + keys)"
+} else {
+    Write-Host "WARNING: repo .env missing - portable app will lack token/provider config" -ForegroundColor Yellow
+}
 Remove-Item (Join-Path $BackendRuntime "host\.venv") -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $BackendRuntime "host\*.log") -Force -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $BackendRuntime "host\commands.log") -Force -ErrorAction SilentlyContinue
