@@ -30,6 +30,9 @@ SetCompressor /SOLID lzma
 
 Section "Mira"
   SetOutPath "$INSTDIR"
-  File /r "..\dist\mira-portable\*"
+  ; runtime\ollama is excluded: its model blobs can reach >4 GB each, and the
+  ; 32-bit makensis cannot mmap a single file over 4 GB. The portable folder
+  ; keeps ollama for direct use; the one-click installer ships without it.
+  File /r /x "ollama" "..\dist\mira-portable\*"
   CreateShortcut "$DESKTOP\Mira.lnk" "$INSTDIR\Mira.exe"
 SectionEnd
