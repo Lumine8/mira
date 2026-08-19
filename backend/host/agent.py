@@ -42,6 +42,11 @@ from pathlib import Path
 
 import requests
 
+# The embeddable python runtime ships a ._pth file that leaves the script's
+# own directory off sys.path, so sibling imports (browser, control) would fail
+# when run with `python agent.py`. Make them importable no matter how we launch.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from browser import BrowserXError, post_tweet, read_own_timeline
 from control import ControlError, run_control
 

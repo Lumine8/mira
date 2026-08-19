@@ -266,6 +266,12 @@ _STALL_NUDGE_NOTE = (
     "not find it, and suggest where the voice could look."
 )
 
+_EMPTY_REPLY_NUDGE = (
+    "\n\nYour previous attempt produced no words. Answer the voice plainly now, "
+    "in your own voice, even if the answer is short. Write at least one real "
+    "sentence."
+)
+
 
 class _BrowseStreamFilter:
     """Yields a reply stream with any [[...]] intent markers suppressed, while
@@ -814,12 +820,30 @@ class ConversationManager:
         combined = "\n\n".join(c for c in (extra_context, self_context) if c)
         messages = build_messages(user_input, conversation=history, extra_context=combined, image=image)
 
+        # Gemini can occasionally answer a 200 with an empty stream (safety
+        # filter blip, transient API hiccup). That would silently persist a
+        # blank reply, which reads as "she ignored me". Retry the first pass
+        # once with a gentle nudge before settling for a fallback.
         filt = _BrowseStreamFilter()
         chunks: list[str] = []
         raws: list[str] = []
         async for chunk in filt.clean(self.provider.stream_chat(messages)):
             chunks.append(chunk)
             yield chunk
+        if not "".join(chunks).strip() and not filt.raw().strip() and not self._proposals:
+            logger.warning("empty reply stream from provider; retrying with a nudge")
+            if on_activity is not None:
+                await on_activity("thinking")
+            nudge_messages = build_messages(
+                user_input,
+                conversation=history,
+                extra_context="\n\n".join(c for c in (combined, _EMPTY_REPLY_NUDGE) if c),
+                image=image,
+            )
+            filt = _BrowseStreamFilter()
+            async for chunk in filt.clean(self.provider.stream_chat(nudge_messages)):
+                chunks.append(chunk)
+                yield chunk
         raw = filt.raw()
         raws.append(raw)
         await self._propose_all_from(raw, conversation_id, on_activity)
