@@ -198,6 +198,13 @@ Reverse-proxy `mira.yourdomain.com` → `localhost:8080`, forwarding WebSocket
 - **Tailscale** — `tailscale serve 8080`; share the `https://...` URL. Only
   people on your tailnet can reach her — a *second* layer over the token.
 
+> **Port 8000 must be free for the portable app.** The desktop companion adopts an
+> already-running backend on `127.0.0.1:8000` — if the Docker stack (`mira-api-1`)
+> is up, the installed app adopts that postgres-mode backend, which serves no web
+> UI and answers `/` with `{"detail":"Not Found"}`. Run `docker compose down`
+> (or stop the stack) before launching `Mira.exe` from the portable folder or the
+> NSIS install.
+
 > **After switching nameservers, the zone must go Active.** Until Cloudflare
 > marks `mousebase.dev` Active, public resolvers may still answer from the old
 > DNS or return NXDOMAIN for the tunnel's `cfargotunnel.com` hostname. That's

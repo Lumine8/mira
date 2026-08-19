@@ -134,6 +134,21 @@ Remove-Item (Join-Path $BackendRuntime "host\*.log") -Force -ErrorAction Silentl
 Remove-Item (Join-Path $BackendRuntime "host\commands.log") -Force -ErrorAction SilentlyContinue
 Ok "backend copied"
 
+# ---- 3b. web app (the UI the desktop window loads) -----------------------------------
+Step "web app"
+$WebDist = Join-Path $Root "web\dist"
+if (-not (Test-Path (Join-Path $WebDist "index.html"))) {
+    throw "web app not built - run `npm run build` in web/ first (missing $WebDist\index.html)"
+}
+# The backend serves the SPA from web/dist next to the runtime (app/main.py
+# resolves parents[2]/web/dist = runtime/web/dist in a portable layout). Copy
+# it there so the desktop window has a UI to load.
+$WebRuntime = Join-Path $Runtime "web\dist"
+New-Item -ItemType Directory -Path $WebRuntime -Force | Out-Null
+robocopy $WebDist $WebRuntime /E /IS /IT | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy web app failed (exit $LASTEXITCODE)" }
+Ok "web app -> runtime\web\dist"
+
 # ---- 4. writable data dir ------------------------------------------------------------
 Step "data dir"
 New-Item -ItemType Directory -Path (Join-Path $DataDir "models\sherpa") -Force | Out-Null
