@@ -236,10 +236,19 @@ class MiraStack {
     const env = { ...process.env, ...loadEnvFile(this.rt.envFile) };
     env.OLLAMA_HOST = `http://127.0.0.1:${OLLAMA_PORT}`;
     env.DATABASE_URL_OVERRIDE = `sqlite:///${this.rt.dataDir.replace(/\\/g, "/")}/mira.db`;
-    if (this.rt.mode === "portable") {
-      // In a portable install the STT model must live in the writable data dir,
-      // not next to the read-only program files.
-      env.STT_MODEL_DIR = path.join(this.rt.dataDir, "models", "sherpa");
+if (this.rt.mode === "portable") {
+      // In a portable install the STT + KWS models must live in the writable
+      // data dir, not next to the read-only program files. The resolver looks
+      // for files directly in the given dir, so point at the model folders
+      // themselves (the whisper one is nested under data/models/sherpa).
+      env.STT_MODEL_DIR = path.join(this.rt.dataDir, "models", "sherpa", "sherpa-onnx-whisper-base.en");
+      env.KWS_MODEL_DIR = path.join(
+        this.rt.dataDir,
+        "models",
+        "kws",
+        "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+      );
+      fs.mkdirSync(this.rt.dataDir, { recursive: true });
     }
     try {
       fs.mkdirSync(this.rt.dataDir, { recursive: true });

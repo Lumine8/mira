@@ -169,6 +169,23 @@ if (-not $skipModels) {
     } else { Ok "whisper model already present" }
 } else { Ok "skipped (-SkipModels)" }
 
+# ---- 5b. sherpa keyword-spotter model (optional) ---------------------------------------
+# The wake-word gate that hears her name before whisper runs. Ships from the repo
+# data/models/kws; the resolver looks for the files directly in the model folder.
+Step "keyword-spotter model"
+if (-not $skipModels) {
+    $kwsSrc = Join-Path $Root "data\models\kws\sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+    $kwsDst = Join-Path $DataDir "models\kws\sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+    if (-not (Test-Path (Join-Path $kwsDst "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"))) {
+        if (Test-Path $kwsSrc) {
+            Copy-Item $kwsSrc $kwsDst -Recurse -Force
+            Ok "keyword-spotter model copied"
+        } else {
+            Write-Host "keyword-spotter model not found in $kwsSrc - wake word gate will be disabled" -ForegroundColor Yellow
+        }
+    } else { Ok "keyword-spotter model already present" }
+} else { Ok "skipped (-SkipModels)" }
+
 # ---- 6. ollama (optional) ----------------------------------------------------------------
 Step "ollama"
 if ($noOllama) { Ok "skipped (-NoOllama)" }
