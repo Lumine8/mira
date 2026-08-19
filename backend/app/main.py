@@ -58,7 +58,31 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if settings.reminders_enabled:
         reminders.start()
         logger.info("reminders started (heartbeat=%ss)", settings.reminder_heartbeat_seconds)
+    if settings.tts_enabled:
+        # Warm the kokoro pipeline off the request path: the first synthesis
+        # pays the model-load cost (~9s), which would otherwise hit the first
+        # reply and make her seem slow to speak. Fire-and-forget in a thread so
+        # startup stays fast.
+        import threading
+
+        threading.Thread(target=_warm_tts, daemon=True).start()
+        logger.info("tts pipeline warming in background")
+
     yield
+    _shutdown_loops()
+
+
+def _warm_tts() -> None:
+    try:
+        from app.services.speech.service import synthesize
+
+        synthesize("Hello.")
+        logger.info("tts pipeline ready")
+    except Exception as exc:  # pragma: no cover - warming must never crash boot
+        logger.warning("tts warm-up failed (first synthesis may be slow): %s", exc)
+
+
+def _shutdown_loops() -> None:
     mind.stop()
     mote.stop()
     reminders.stop()

@@ -143,17 +143,38 @@ async function sendAsk(text) {
   convoWs.send(JSON.stringify({ type: "text", content: text }));
 }
 
+// Split long replies into sentence-sized chunks so the first sentence plays
+// almost immediately while the rest are still being synthesized.
+function splitSpeech(text) {
+  const parts = text.match(/[^.!?…]+[.!?…]*/g) || [text];
+  const chunks = [];
+  let cur = "";
+  for (const p of parts) {
+    const t = (p || "").trim();
+    if (!t) continue;
+    if (cur && (cur + " " + t).length > 180) {
+      chunks.push(cur);
+      cur = t;
+    } else {
+      cur = cur ? `${cur} ${t}` : t;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks.length ? chunks : [text];
+}
+
 async function speakReply(text) {
   if (!conversationId || !text) return;
-  try {
-    const b64 = await window.mira.speak(conversationId, text);
-    if (!b64) return;
-    const audio = new Audio(`data:audio/wav;base64,${b64}`);
-    audio.onended = dequeueAudio;
-    queueAudio(audio);
-    audio.play().catch(() => {});
-  } catch {
-    /* TTS unavailable — the text stays on the HUD */
+  for (const chunk of splitSpeech(text)) {
+    try {
+      const b64 = await window.mira.speak(conversationId, chunk);
+      if (!b64) continue;
+      const audio = new Audio(`data:audio/wav;base64,${b64}`);
+      audio.onended = dequeueAudio;
+      queueAudio(audio);
+    } catch {
+      /* TTS unavailable — the text stays on the HUD */
+    }
   }
 }
 
@@ -161,15 +182,16 @@ async function speakReply(text) {
 // own, through the voice-output bridge (no call conversation needed).
 async function speakAnnouncement(text) {
   if (!text) return;
-  try {
-    const b64 = await window.mira.tts(text);
-    if (!b64) return;
-    const audio = new Audio(`data:audio/wav;base64,${b64}`);
-    audio.onended = dequeueAudio;
-    queueAudio(audio);
-    audio.play().catch(() => {});
-  } catch {
-    /* TTS unavailable — the alert stays on the HUD */
+  for (const chunk of splitSpeech(text)) {
+    try {
+      const b64 = await window.mira.tts(chunk);
+      if (!b64) continue;
+      const audio = new Audio(`data:audio/wav;base64,${b64}`);
+      audio.onended = dequeueAudio;
+      queueAudio(audio);
+    } catch {
+      /* TTS unavailable — the alert stays on the HUD */
+    }
   }
 }
 
@@ -209,10 +231,10 @@ let listenOn = false;
 let speakingNow = false; // set while her TTS audio is playing (avoid hearing herself)
 
 const VAD_PRE_MS = 250; // keep 250ms before speech onset so no first word is lost
-const VAD_END_MS = 900; // this much silence ends an utterance
+const VAD_END_MS = 550; // this much silence ends an utterance (snappier than 900ms)
 const VAD_MAX_MS = 12000; // hard cap on a single utterance
-const VAD_MIN_MS = 350; // ignore sub-second noise blips
-const VAD_THRESHOLD = 0.03; // RMS floor for speech
+const VAD_MIN_MS = 300; // ignore sub-second noise blips
+const VAD_THRESHOLD = 0.02; // RMS floor for speech (lower catches quieter voices)
 
 const vad = { state: "idle", pre: [], buf: [], totalMs: 0, silenceMs: 0, speechMs: 0, floor: 0.015 };
 
@@ -329,17 +351,14 @@ function sendUtterance(chunks, sampleRate) {
     off += c.length;
   }
   const wav = encodeWav(pcm, sampleRate);
-  const ww = (state.wake_word || "").trim().toLowerCase();
   const gate = () => {
     // Cheap audio-level gate: does this audio actually contain her name?
     // The backend keyword-spotter answers without running whisper, so chatter
-    // she wasn't summoned by never reaches transcription.
+    // she wasn't summoned by never reaches transcription. A false "not heard"
+    // must not swallow real speech though — so the gate is a soft hint, and the
+    // fuzzy text gate below is the real filter.
     return window.mira.wakeCheck(wav).then(
       (heard) => {
-        if (ww && !heard) {
-          setMiraLine("she's listening — call her by name", "");
-          return;
-        }
         transcribe(wav);
       },
       () => transcribe(wav), // gate unavailable: fall back to today's behaviour
@@ -370,18 +389,29 @@ function sendUtterance(chunks, sampleRate) {
 }
 
 // The wake word: she only answers in always-listening mode when she's called
-// ("mira, ..."). Returns the text with the wake word stripped (or null when the
-// utterance didn't summon her). No wake word configured = every utterance heard.
+// ("mira, ..."). Whisper base.en renders the name loosely (myra, meera, mira,
+// "hey mira"), so instead of an exact prefix match we strip a leading name-like
+// word plus any greeting that precedes it. Returns the text with the wake word
+// stripped (or null when the utterance clearly didn't summon her). No wake
+// word configured = every utterance heard.
+const WAKE_GREETINGS = /^(hey|hi|okay|ok|so|listen|um|uh|please)\b[\s,.:!?]*/i;
+
 function applyWakeWord(text) {
   const ww = (state.wake_word || "").trim().toLowerCase();
   if (!ww) return text;
-  const lower = text.toLowerCase();
-  if (!lower.startsWith(ww)) {
+  let lower = text.toLowerCase().trim();
+  let rest = lower.replace(WAKE_GREETINGS, "");
+  if (rest === lower) rest = lower; // no greeting — keep original start
+  // Whisper renderings that still mean her name. "mira" is the canonical one;
+  // these are the shapes a 39M-param base model actually produces.
+  const name = /^(m[iy]r[aeiouy]|m[eia]r[aeiouy]|m[aiey]ra|myra|meera|mira|mara)\b/;
+  const m = rest.match(name);
+  if (!m) {
     setMiraLine("she's listening — call her by name", "");
     return null;
   }
-  const rest = text.slice(ww.length).replace(/^[\s,.;:!?]+/, "");
-  return rest || null;
+  const stripped = rest.slice(m[0].length).replace(/^[\s,.;:!?]+/, "");
+  return stripped || null;
 }
 
 function encodeWav(pcm, sampleRate) {
