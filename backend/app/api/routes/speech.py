@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
 from app.services.identity import get_current_user_id
+from app.services.speech.kws import check_wake_word
 from app.services.speech.service import synthesize
 from app.services.speech.stt import transcribe
 
@@ -55,3 +56,26 @@ async def transcribe_audio(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"text": text}
+
+
+@router.post("/wake")
+async def wake_word_audio(
+    file: UploadFile = File(...),
+    _user_id: int = Depends(get_current_user_id),
+) -> dict:
+    """Did this audio contain the wake word? Cheap audio-level gate.
+
+    The keyword-spotter runs before whisper: in always-listening mode the HUD
+    sends each captured segment here first, and only asks for a full
+    transcription (POST /speech/transcribe) when her name is actually spoken.
+    When no wake word is configured, or the model isn't downloaded, this always
+    returns heard=true so behaviour is unchanged.
+    """
+    wav = await file.read()
+    if not wav:
+        raise HTTPException(status_code=400, detail="empty audio")
+    try:
+        heard = check_wake_word(wav)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"heard": heard}

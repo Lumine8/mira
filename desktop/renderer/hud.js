@@ -318,25 +318,44 @@ function sendUtterance(chunks, sampleRate) {
     off += c.length;
   }
   const wav = encodeWav(pcm, sampleRate);
-  $("mira-line").classList.add("is-speaking");
-  window.mira
-    .transcribe(wav)
-    .then((text) => {
-      $("mira-line").classList.remove("is-speaking");
-      const spoken = (text || "").trim();
-      if (!spoken) {
-        setMiraLine("didn't catch that — try again", "");
-        return;
-      }
-      const gated = applyWakeWord(spoken);
-      if (gated === null) return; // ignored — she wasn't summoned
-      if (gated) sendAsk(gated);
-      else setMiraLine("didn't catch that — try again", "");
-    })
-    .catch(() => {
-      $("mira-line").classList.remove("is-speaking");
-      setMiraLine("hearing failed", "");
-    });
+  const ww = (state.wake_word || "").trim().toLowerCase();
+  const gate = () => {
+    // Cheap audio-level gate: does this audio actually contain her name?
+    // The backend keyword-spotter answers without running whisper, so chatter
+    // she wasn't summoned by never reaches transcription.
+    return window.mira.wakeCheck(wav).then(
+      (heard) => {
+        if (ww && !heard) {
+          setMiraLine("she's listening — call her by name", "");
+          return;
+        }
+        transcribe(wav);
+      },
+      () => transcribe(wav), // gate unavailable: fall back to today's behaviour
+    );
+  };
+  const transcribe = (seg) => {
+    $("mira-line").classList.add("is-speaking");
+    window.mira
+      .transcribe(seg)
+      .then((text) => {
+        $("mira-line").classList.remove("is-speaking");
+        const spoken = (text || "").trim();
+        if (!spoken) {
+          setMiraLine("didn't catch that — try again", "");
+          return;
+        }
+        const gated = applyWakeWord(spoken);
+        if (gated === null) return; // ignored — she wasn't summoned
+        if (gated) sendAsk(gated);
+        else setMiraLine("didn't catch that — try again", "");
+      })
+      .catch(() => {
+        $("mira-line").classList.remove("is-speaking");
+        setMiraLine("hearing failed", "");
+      });
+  };
+  gate();
 }
 
 // The wake word: she only answers in always-listening mode when she's called

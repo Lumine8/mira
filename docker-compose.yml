@@ -94,9 +94,17 @@ services:
       TTS_ENGINE: ${TTS_ENGINE:-kokoro}
       TTS_VOICE: ${TTS_VOICE:-af_river}
       TTS_ENABLED: ${TTS_ENABLED:-true}
+      # The held calendar: a quiet loop fires due reminders/tasks/events as
+      # spoken self_messages the HUD reads aloud.
+      REMINDERS_ENABLED: ${REMINDERS_ENABLED:-true}
+      REMINDER_HEARTBEAT_SECONDS: ${REMINDER_HEARTBEAT_SECONDS:-20}
     volumes:
       - ./backend:/app
       - kokoro-models:/models
+      # Runtime speech models (whisper STT + the KWS wake-word gate) live in
+      # the repo's data/models folder on the host. The container resolves them
+      # to /data/models/..., so mount the repo data dir at /data to share them.
+      - ./data:/data
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

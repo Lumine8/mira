@@ -321,6 +321,43 @@ ipcMain.handle("mira:transcribe", async (_e, wavBytes) => {
   }
 });
 
+// Cheap audio-level wake-word gate: upload the WAV to /speech/wake and return
+// whether Mira's name was spoken. The HUD calls this before /speech/transcribe
+// so whisper only runs when she's actually summoned.
+ipcMain.handle("mira:wakeCheck", async (_e, wavBytes) => {
+  guardUrl(`${API_URL}/speech/wake`);
+  const boundary = "----MiraBoundary" + Math.random().toString(36).slice(2);
+  const head = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="seg.wav"\r\n` +
+      `Content-Type: audio/wav\r\n\r\n`,
+    "utf8",
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
+  const payload = Buffer.concat([head, Buffer.isBuffer(wavBytes) ? wavBytes : Buffer.from(wavBytes), tail]);
+  const body = await new Promise((resolve, reject) => {
+    const req = http.request(
+      `${API_URL}/speech/wake`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": payload.length,
+          ...(getToken() ? { "X-Mira-Token": getToken() } : {}),
+        },
+      },
+      (res) => readBody(res).then(resolve, reject),
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+  try {
+    return JSON.parse(body.toString("utf8")).heard !== false;
+  } catch {
+    return true; // be permissive: if the gate is unavailable, don't block speech
+  }
+});
+
 function windowlessPost(url, data) {
   const payload = JSON.stringify(data || {});
   return new Promise((resolve, reject) => {

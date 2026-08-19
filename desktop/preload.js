@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld("mira", {
   speak: (conversationId, text) => ipcRenderer.invoke("mira:speak", conversationId, text),
   tts: (text) => ipcRenderer.invoke("mira:tts", text),
   transcribe: (wavBytes) => ipcRenderer.invoke("mira:transcribe", wavBytes),
+  wakeCheck: (wavBytes) => ipcRenderer.invoke("mira:wakeCheck", wavBytes),
 });

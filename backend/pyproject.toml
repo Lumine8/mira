@@ -26,6 +26,11 @@ dependencies = [
     # Mira's ears: sherpa-onnx whisper transcribes what the voice says, fully
     # local. The model itself is downloaded at runtime to data/models/sherpa.
     "sherpa-onnx>=1.13",
+    # The wake-word gate (audio-level summon before whisper) BPE-encodes the
+    # configured word with sentencepiece; pypinyin is imported by sherpa's
+    # text2token utility even for English.
+    "sentencepiece>=0.2",
+    "pypinyin>=0.53",
     # Mira's watching: renders videos into still frames she can hold. The
     # container also needs ffmpeg/ffprobe (see Dockerfile).
     "yt-dlp>=2024.12.13",
