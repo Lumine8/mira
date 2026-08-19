@@ -96,3 +96,68 @@ def test_bridge_ignores_when_no_snapshot(db) -> None:
         select(PerceivedEvent).where(PerceivedEvent.source == "system")
     ).scalars().all()
     assert events == []
+
+
+def test_bridge_perceives_focused_window_change(db) -> None:
+    _user(db)
+    uid = 504
+    system_store.record(uid, _snap(focused_window="Visual Studio Code"))
+    system_store.record(uid, _snap(focused_window="Chrome — Gmail"))
+    loop = MindLoop(_NoopProvider())
+
+    loop._system_bridge(db, uid, datetime.now(UTC))
+    events = db.execute(
+        select(PerceivedEvent).where(PerceivedEvent.source == "system")
+    ).scalars().all()
+    assert len(events) == 1
+    assert events[0].kind == "focused_window"
+    assert "Chrome — Gmail" in events[0].content
+
+
+def test_bridge_does_not_repay_same_window_within_cooldown(db) -> None:
+    _user(db)
+    uid = 505
+    system_store.record(uid, _snap(focused_window="Visual Studio Code"))
+    system_store.record(uid, _snap(focused_window="Chrome — Gmail"))
+    loop = MindLoop(_NoopProvider())
+    now = datetime.now(UTC)
+
+    loop._system_bridge(db, uid, now)
+    loop._system_bridge(db, uid, now)
+    events = db.execute(
+        select(PerceivedEvent).where(PerceivedEvent.source == "system")
+    ).scalars().all()
+    assert len(events) == 1  # the same change is not re-offered within cooldown
+
+
+def test_bridge_perceives_clipboard_change(db) -> None:
+    _user(db)
+    uid = 506
+    system_store.record(uid, _snap(clipboard_text="old"))
+    system_store.record(uid, _snap(clipboard_text="git push --force"))
+    loop = MindLoop(_NoopProvider())
+
+    loop._system_bridge(db, uid, datetime.now(UTC))
+    events = db.execute(
+        select(PerceivedEvent).where(PerceivedEvent.source == "system")
+    ).scalars().all()
+    assert len(events) == 1
+    assert events[0].kind == "clipboard_changed"
+    assert "git push --force" in events[0].content
+
+
+def test_bridge_attention_can_be_disabled(db) -> None:
+    _user(db)
+    uid = 507
+    system_store.record(uid, _snap(focused_window="Visual Studio Code"))
+    system_store.record(uid, _snap(focused_window="Chrome — Gmail"))
+    loop = MindLoop(_NoopProvider())
+    loop._system_condition_last["focused_window"] = (
+        datetime.now(UTC).timestamp()
+    )  # pretend it was already noticed
+
+    loop._system_bridge(db, uid, datetime.now(UTC))
+    events = db.execute(
+        select(PerceivedEvent).where(PerceivedEvent.source == "system")
+    ).scalars().all()
+    assert events == []

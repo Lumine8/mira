@@ -295,6 +295,15 @@ class Settings(BaseSettings):
     system_memory_high_percent: float = 90.0
     system_idle_long_seconds: int = 3600
 
+    # Attention awareness: what window the user is focused on and what they
+    # copied. Gated separately from the load/idle conditions because it reads
+    # the user's own screen and clipboard. Clipboard is only offered to Mira
+    # when it changed and is shorter than the cap, so a long dump or a stale
+    # buffer isn't re-noticed on every heartbeat.
+    attention_enabled: bool = True
+    attention_window_changed_cooldown_seconds: int = 120
+    attention_clipboard_max_chars: int = 2000
+
     # Ambient senses: time-of-day/date texture is always present. Weather is a
     # best-effort, no-key fetch (wttr.in) that fails silently; disable to skip it.
     mira_ambient_enabled: bool = True

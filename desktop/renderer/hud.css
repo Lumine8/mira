@@ -108,6 +108,16 @@ body {
   gap: 6px;
 }
 
+.hud__stat--wide {
+  grid-column: span 2;
+}
+
+.hud__stat-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hud__stat {
   background: var(--bg-raised);
   border: 1px solid var(--border);

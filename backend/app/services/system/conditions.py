@@ -83,3 +83,45 @@ def check_conditions(
         )
 
     return found
+
+
+def check_attention(
+    prev: SystemSnapshot | None,
+    snap: SystemSnapshot,
+    *,
+    clipboard_max_chars: int = 2000,
+) -> list[Condition]:
+    """Which of the user's focus signals changed since the last read.
+
+    Unlike the load conditions above (thresholds on a single snapshot), the
+    attention conditions are about *change*: the user moved to a new window, or
+    copied fresh text. When nothing changed, nothing is returned, so the mind
+    loop doesn't re-offer the same window or buffer on every heartbeat.
+    """
+    if snap is None:
+        return []
+    found: list[Condition] = []
+
+    window = snap.focused_window.strip() if snap.focused_window else None
+    if window:
+        prev_window = prev.focused_window.strip() if prev and prev.focused_window else None
+        if window != prev_window:
+            found.append(
+                Condition(
+                    kind="focused_window",
+                    content=f"The user is now focused on: {window}.",
+                )
+            )
+
+    clip = snap.clipboard_text.strip() if snap.clipboard_text else None
+    if clip and len(clip) <= clipboard_max_chars:
+        prev_clip = prev.clipboard_text.strip() if prev and prev.clipboard_text else None
+        if clip != prev_clip:
+            found.append(
+                Condition(
+                    kind="clipboard_changed",
+                    content=f"The user just copied: {clip}",
+                )
+            )
+
+    return found

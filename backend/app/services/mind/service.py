@@ -40,7 +40,7 @@ from app.services.self.service import (
     _clean,
     extract_json,
 )
-from app.services.system.conditions import check_conditions
+from app.services.system.conditions import check_attention, check_conditions
 from app.services.system.service import system_store
 from app.services.wants.service import WantService
 
@@ -595,9 +595,22 @@ class MindLoop:
             memory_high_percent=settings.system_memory_high_percent,
             idle_long_seconds=settings.system_idle_long_seconds,
         )
+        if settings.attention_enabled:
+            history = system_store.history(user_id)
+            prev = history[-2] if len(history) >= 2 else None
+            conditions += check_attention(
+                prev,
+                snap,
+                clipboard_max_chars=settings.attention_clipboard_max_chars,
+            )
         for cond in conditions:
             last = self._system_condition_last.get(cond.kind, 0.0)
-            if now.timestamp() - last < settings.system_awareness_cooldown_seconds:
+            cooldown = (
+                settings.attention_window_changed_cooldown_seconds
+                if cond.kind in ("focused_window", "clipboard_changed")
+                else settings.system_awareness_cooldown_seconds
+            )
+            if now.timestamp() - last < cooldown:
                 continue
             db.add(
                 PerceivedEvent(

@@ -14,15 +14,21 @@
 
 param(
     [string]$ApiUrl = "http://localhost:8000",
-    [string]$Token = $env:MIRA_ACCESS_TOKEN
+    [string]$Token = $env:MIRA_ACCESS_TOKEN,
+    [switch]$NoClipboard
 )
 
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class UserActivity2 {
     [DllImport("user32.dll")]
     public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
     [StructLayout(LayoutKind.Sequential)]
     public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
 }
@@ -32,6 +38,31 @@ $lastInput = New-Object UserActivity2+LASTINPUTINFO
 $lastInput.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($lastInput)
 [UserActivity2]::GetLastInputInfo([ref]$lastInput) | Out-Null
 $idleSeconds = [math]::Max(0, [int](([Environment]::TickCount - $lastInput.dwTime) / 1000))
+
+# What the user is looking at, and what they last copied. Cheap, best-effort,
+# and never fatal: a locked screen or a non-text clipboard just yields empty.
+$focusedWindow = ""
+$hWnd = [UserActivity2]::GetForegroundWindow()
+if ($hWnd -ne [IntPtr]::Zero) {
+    $sb = New-Object System.Text.StringBuilder 512
+    if ([UserActivity2]::GetWindowText($hWnd, $sb, 512) -gt 0) {
+        $focusedWindow = $sb.ToString().Trim()
+    }
+}
+
+$clipboardText = ""
+if (-not $NoClipboard) {
+    try {
+        if ($idleSeconds -le 300) {
+            $clip = Get-Clipboard -TextFormatType Text -ErrorAction Stop
+            if ($clip) {
+                $clipboardText = ($clip -join " ").Trim()
+            }
+        }
+    } catch {
+        $clipboardText = ""
+    }
+}
 
 # CPU total, memory totals/free, battery (desktop machines have none).
 try {
@@ -71,6 +102,8 @@ $snapshot = @{
     battery_percent   = $battPercent
     battery_charging  = $battCharging
     idle_seconds      = $idleSeconds
+    focused_window    = $focusedWindow
+    clipboard_text    = $clipboardText
     top_processes     = $top
 } | ConvertTo-Json -Depth 4
 

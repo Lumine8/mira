@@ -24,6 +24,10 @@ class SystemSnapshot(BaseModel):
     battery_percent: float | None = None
     battery_charging: bool | None = None
     idle_seconds: int | None = None
+    # What the user is looking at, and what they last copied — the attention
+    # fields the mind loop reads to notice when her human's focus shifts.
+    focused_window: str | None = None
+    clipboard_text: str | None = None
     top_processes: list[ProcessSample] = []
 
 

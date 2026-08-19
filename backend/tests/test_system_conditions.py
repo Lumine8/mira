@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from app.schemas.system import SystemSnapshot
-from app.services.system.conditions import check_conditions
+from app.services.system.conditions import check_attention, check_conditions
 
 
 def _snap(**kw) -> SystemSnapshot:
@@ -55,3 +55,76 @@ def test_thresholds_are_configurable() -> None:
     kinds = [c.kind for c in conds]
     assert "battery_low" in kinds
     assert "cpu_high" in kinds
+
+
+# -- attention: the user's focus ---------------------------------------------
+
+
+def test_attention_notices_focused_window_change() -> None:
+    conds = check_attention(
+        _snap(focused_window="Visual Studio Code"),
+        _snap(focused_window="Chrome — Gmail"),
+    )
+    kinds = [c.kind for c in conds]
+    assert "focused_window" in kinds
+    assert "Chrome — Gmail" in next(
+        c.content for c in conds if c.kind == "focused_window"
+    )
+
+
+def test_attention_ignores_unchanged_window() -> None:
+    conds = check_attention(
+        _snap(focused_window="Visual Studio Code"),
+        _snap(focused_window="Visual Studio Code"),
+    )
+    assert conds == []
+
+
+def test_attention_ignores_blank_window() -> None:
+    conds = check_attention(
+        _snap(focused_window="Visual Studio Code"),
+        _snap(focused_window=""),
+    )
+    assert conds == []
+
+
+def test_attention_notices_clipboard_change() -> None:
+    conds = check_attention(
+        _snap(clipboard_text="old"),
+        _snap(clipboard_text="curl -X POST http://localhost:8000/"),
+    )
+    kinds = [c.kind for c in conds]
+    assert "clipboard_changed" in kinds
+    assert "curl -X POST" in next(
+        c.content for c in conds if c.kind == "clipboard_changed"
+    )
+
+
+def test_attention_ignores_unchanged_clipboard() -> None:
+    conds = check_attention(
+        _snap(clipboard_text="same"),
+        _snap(clipboard_text="same"),
+    )
+    assert conds == []
+
+
+def test_attention_caps_overlong_clipboard() -> None:
+    big = "x" * 5000
+    conds = check_attention(None, _snap(clipboard_text=big))
+    assert conds == []
+
+
+def test_attention_cap_is_configurable() -> None:
+    conds = check_attention(
+        _snap(clipboard_text="tiny"),
+        _snap(clipboard_text="still tiny"),
+        clipboard_max_chars=4,
+    )
+    assert conds == []
+
+
+def test_attention_with_no_previous_snapshot() -> None:
+    conds = check_attention(None, _snap(focused_window="Terminal"))
+    kinds = [c.kind for c in conds]
+    assert "focused_window" in kinds
+    assert "clipboard_changed" not in kinds

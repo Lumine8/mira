@@ -88,6 +88,17 @@ function renderStats(sys) {
   const idle = sys?.idle_seconds;
   $("stat-idle").textContent =
     idle == null ? "—" : idle < 60 ? `${idle}s` : `${Math.round(idle / 60)}m`;
+  const watchEl = $("stat-watching");
+  const fw = sys?.focused_window;
+  if (fw) {
+    watchEl.textContent = fw.length > 40 ? `${fw.slice(0, 40)}…` : fw;
+    watchEl.title = sys.clipboard_text
+      ? `copied: ${sys.clipboard_text.slice(0, 120)}`
+      : fw;
+  } else {
+    watchEl.textContent = "—";
+    watchEl.title = "";
+  }
 }
 
 function renderPending(pending) {
