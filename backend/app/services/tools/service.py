@@ -853,22 +853,51 @@ class ToolService:
         proposing the URL, which the browse tool fetches for her.
         """
         query = query.strip()[: _MAX_WEB_QUERY]
-        try:
-            resp = httpx.get(
-                "https://lite.duckduckgo.com/lite/",
-                params={"q": query},
-                timeout=_BROWSE_TIMEOUT,
-                headers={
-                    "User-Agent": _BROWSE_UA,
-                    "Accept-Language": "en",
-                },
-                follow_redirects=True,
+        body: str | None = None
+        for endpoint in ("https://lite.duckduckgo.com/lite/", "https://html.duckduckgo.com/html/"):
+            try:
+                resp = httpx.get(
+                    endpoint,
+                    params={"q": query},
+                    timeout=_BROWSE_TIMEOUT,
+                    headers={
+                        "User-Agent": _BROWSE_UA,
+                        "Accept-Language": "en",
+                    },
+                    follow_redirects=True,
+                )
+                resp.raise_for_status()
+                candidate = resp.text
+                if "anomaly" in candidate.lower() and not self._parse_ddg_results(candidate):
+                    # DuckDuckGo's bot-wall (202 anomaly page): the index
+                    # refused the request. Try the other endpoint before giving
+                    # up; only a real page counts as a search.
+                    logger.warning("web search bot-walled at %s (%s)", endpoint, query)
+                    continue
+                body = candidate
+                break
+            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+                logger.warning("web search fetch failed at %s (%s): %s", endpoint, query, exc)
+                continue
+        if body is None:
+            # Both endpoints are bot-walled. Fall back to the extraction proxy,
+            # which renders the same search page through its own browser and
+            # returns the results as readable text.
+            try:
+                fallback_url = (
+                    "https://lite.duckduckgo.com/lite/?q=" + quote(query)
+                )
+                reader = _reader_text(fallback_url)
+                results = self._parse_reader_results(reader) if reader else []
+                if results:
+                    return self._render_web_results(query, results, source="reader")
+            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+                logger.warning("web search reader fallback failed (%s): %s", query, exc)
+            return (
+                "[error] the web index refused the search right now — it may be "
+                "rate-limiting or blocking bots. Try again in a minute, or name "
+                "a specific page to read with [[browse|the url|why]]."
             )
-            resp.raise_for_status()
-            body = resp.text
-        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
-            logger.warning("web search failed (%s): %s", query, exc)
-            return f"[error] could not search the web: {exc}"
 
         results = self._parse_ddg_results(body)
         if not results:
@@ -878,10 +907,13 @@ class ToolService:
                 "a finding — try plainer words, or propose a specific page to "
                 "read directly."
             )
+        return self._render_web_results(query, results, source="duckduckgo")
 
+    def _render_web_results(self, query: str, results: list[dict], *, source: str) -> str:
+        """Turn parsed web-search results into the readable block she holds."""
         parts = [
-            "These are real pages from the open web (DuckDuckGo), not guesses. "
-            f"Search protocol: index = DuckDuckGo HTML; query = {query!r}; "
+            "These are real pages from the open web, not guesses. "
+            f"Search protocol: index = DuckDuckGo ({source}); query = {query!r}; "
             f"retrieval date = {datetime.now(UTC).strftime('%Y-%m-%d')}; "
             f"returned = {len(results)} results. Skim titles and snippets, "
             "then propose the page you actually want to read with "
@@ -899,26 +931,44 @@ class ToolService:
         out = "\n".join(parts)
         return out[:_MAX_WEB_RESULTS] + ("\n… (truncated)" if len(out) > _MAX_WEB_RESULTS else "")
 
+    def _parse_reader_results(self, text: str) -> list[dict]:
+        """The extraction proxy returns the search page as readable text where
+        each result is a snippet block followed by a URL line (scheme optional —
+        the proxy prints bare domains). Split on URL-looking lines and pair each
+        with the snippet above it."""
+        found: list[dict] = []
+        url_re = re.compile(r"(?m)^(https?://[^\s]+|www\.[^\s]+|[a-z0-9][a-z0-9.-]+\.[a-z]{2,}/[^\s]*)$")
+        matches = list(url_re.finditer(text))
+        seen: set[str] = set()
+        for i, m in enumerate(matches):
+            raw = m.group(1).rstrip(".,;)")
+            url = raw if raw.startswith(("http://", "https://")) else f"https://{raw}"
+            start = (matches[i - 1].end() if i else 0)
+            snippet = text[start:m.start()].strip()
+            snippet = re.sub(r"\s+", " ", snippet).strip()
+            snippet = snippet.replace("**", "")
+            if len(snippet) > _MAX_WEB_SNIPPET:
+                snippet = snippet[:_MAX_WEB_SNIPPET].rstrip() + "…"
+            title = snippet.split(". ", 1)[0].strip() or url
+            if url not in seen:
+                seen.add(url)
+                found.append({"title": title, "url": url, "snippet": snippet})
+        return found
+
     def _parse_ddg_results(self, body: str) -> list[dict]:
         """Pull title/url/snippet triples out of DuckDuckGo's HTML results page.
-        Each result is a <a rel="nofollow" href="...uddg=redirect..." class='result-link'>title</a>
-        followed by a snippet in a <td class='result-snippet'>...</td>. Links are
-        escaped by DuckDuckGo (uddg= redirects); those decode back to the real
-        URL."""
+        The lite endpoint marks results with a <a class='result-link'> anchor and
+        a <td class='result-snippet'>; the html endpoint uses result__a /
+        result__snippet. Links are escaped by DuckDuckGo (uddg= redirects);
+        those decode back to the real URL."""
         found: list[dict] = []
+        anchor = r"<a(?=[^>]*class=[\"']result(?:-link|__a)[\"'])(?=[^>]*href=[\"'](?P<href>[^\"']+)[\"'])[^>]*>(?P<title>.*?)</a>"
+        snippet = r"<(?:td|a)[^>]*class=[\"']result(?:-snippet|__snippet)[\"'][^>]*>(?P<snippet>.*?)</(?:td|a)>"
         # Split on each result anchor, keeping the anchor with its trailing block
         # (snippet and display URL) so triples stay together.
-        for piece in re.split(r'(?=<a[^>]*class=["\']result-link["\'][^>]*>)', body)[1:]:
-            title_m = re.search(
-                r'<a(?=[^>]*class=["\']result-link["\'])(?=[^>]*href=["\'](?P<href>[^"\']+)["\'])[^>]*>(?P<title>.*?)</a>',
-                piece,
-                re.DOTALL,
-            )
-            snippet_m = re.search(
-                r'<td[^>]*class=["\']result-snippet["\'][^>]*>(?P<snippet>.*?)</td>',
-                piece,
-                re.DOTALL,
-            )
+        for piece in re.split(r"(?=<a[^>]*class=[\"']result(?:-link|__a)[\"'][^>]*>)", body)[1:]:
+            title_m = re.search(anchor, piece, re.DOTALL)
+            snippet_m = re.search(snippet, piece, re.DOTALL)
             if not title_m:
                 continue
             title = re.sub(r"<[^>]+>", "", title_m.group("title"))
@@ -929,13 +979,13 @@ class ToolService:
             url = self._ddg_real_url(href)
             if not url:
                 continue
-            snippet = ""
+            snip = ""
             if snippet_m:
-                snippet = re.sub(r"<[^>]+>", "", snippet_m.group("snippet"))
-                snippet = html.unescape(snippet).strip()
-                if len(snippet) > _MAX_WEB_SNIPPET:
-                    snippet = snippet[:_MAX_WEB_SNIPPET].rstrip() + "…"
-            found.append({"title": title, "url": url, "snippet": snippet})
+                snip = re.sub(r"<[^>]+>", "", snippet_m.group("snippet"))
+                snip = html.unescape(snip).strip()
+                if len(snip) > _MAX_WEB_SNIPPET:
+                    snip = snip[:_MAX_WEB_SNIPPET].rstrip() + "…"
+            found.append({"title": title, "url": url, "snippet": snip})
         return found
 
     def _ddg_real_url(self, href: str) -> str:

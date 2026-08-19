@@ -855,6 +855,118 @@ def test_parse_ddg_results_unwraps_redirects() -> None:
     assert out[1]["url"] == "https://plain.org/page"
 
 
+def test_parse_ddg_results_handles_html_format() -> None:
+    """The html endpoint marks results with result__a / result__snippet classes;
+    the same parser handles both."""
+    import app.services.tools.service as tools_module
+
+    body = """
+    <div class="result results_links">
+      <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fx&amp;rut=a">A result title</a>
+      <a class="result__snippet" href="//duckduckgo.com/l/?uddg=...">A short snippet here.</a>
+    </div>
+    """
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    out = svc._parse_ddg_results(body)
+    assert len(out) == 1
+    assert out[0]["title"] == "A result title"
+    assert out[0]["url"] == "https://example.com/x"
+    assert "A short snippet here." in out[0]["snippet"]
+
+
+def test_web_search_bot_wall_falls_back_and_reports(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """A bot-wall (anomaly page) from one endpoint tries the next; when both
+    refuse, the search returns an honest error instead of silence."""
+    import app.services.tools.service as tools_module
+
+    class _Anomaly:
+        text = "anomaly page, no results here"
+
+        def raise_for_status(self) -> None:
+            pass
+
+    calls: list = []
+
+    def fake_get(url, params, timeout, headers, follow_redirects):
+        calls.append(url)
+        return _Anomaly()
+
+    monkeypatch.setattr(tools_module.httpx, "get", fake_get)
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    svc._record_skill_tool_run = lambda *a, **k: None
+    out = svc._render_web_search("weather")
+    assert calls == [
+        "https://lite.duckduckgo.com/lite/",
+        "https://html.duckduckgo.com/html/",
+    ]
+    assert "[error] the web index refused" in out
+
+
+def test_web_search_reader_fallback_parses_snippets(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """When both DuckDuckGo endpoints are bot-walled, the search falls back to
+    the extraction proxy and still yields real results as snippet/url pairs."""
+    import app.services.tools.service as tools_module
+
+    class _Anomaly:
+        text = "anomaly page, no results here"
+
+        def raise_for_status(self) -> None:
+            pass
+
+    def fake_get(url, params, timeout, headers, follow_redirects):
+        return _Anomaly()
+
+    reader_body = (
+        "Hourly weather forecast in Portland, OR.\n"
+        "https://www.accuweather.com/en/us/portland/97209/hourly\n\n"
+        "Today's weather in Portland.\n"
+        "https://www.easeweather.com/today\n"
+    )
+
+    monkeypatch.setattr(tools_module.httpx, "get", fake_get)
+    monkeypatch.setattr(tools_module, "_reader_text", lambda url: reader_body)
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    svc._record_skill_tool_run = lambda *a, **k: None
+    out = svc._render_web_search("weather in Portland")
+    assert "index = DuckDuckGo (reader)" in out
+    assert "returned = 2 results" in out
+    assert "www.accuweather.com" in out
+    assert "Hourly weather forecast" in out
+
+
+def test_parse_reader_results_pairs_urls_with_snippets() -> None:
+    import app.services.tools.service as tools_module
+
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    body = (
+        "First result about weather here.\n"
+        "https://example.com/one\n\n"
+        "Second result, longer snippet about the forecast.\n"
+        "https://example.com/two\n"
+    )
+    out = svc._parse_reader_results(body)
+    assert len(out) == 2
+    assert out[0]["url"] == "https://example.com/one"
+    assert "First result" in out[0]["snippet"]
+    assert out[1]["url"] == "https://example.com/two"
+
+
+def test_parse_reader_results_handles_bare_domains() -> None:
+    """The extraction proxy prints URLs without a scheme; the parser must still
+    recognize them and restore the https prefix."""
+    import app.services.tools.service as tools_module
+
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    body = (
+        "Weather today in Portland.\n"
+        "www.accuweather.com/en/us/portland/97209/hourly\n"
+    )
+    out = svc._parse_reader_results(body)
+    assert len(out) == 1
+    assert out[0]["url"] == "https://www.accuweather.com/en/us/portland/97209/hourly"
+    assert "Weather today" in out[0]["snippet"]
+
+
 def test_render_web_search_has_protocol_header(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
     """A web search returns ranked links with a search-protocol header, capped
     to the configured page size."""
