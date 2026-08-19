@@ -254,6 +254,16 @@ class Settings(BaseSettings):
     def research_window_open(self) -> bool:
         return self.mira_research_autonomous
 
+    # General web search is read-only too: it returns links and short snippets
+    # from the open web (DuckDuckGo, no key), changes nothing, and is fully
+    # recorded — so it runs on its own without an approval popup, the way
+    # research does. Set to false to put the consent wall back.
+    mira_web_autonomous: bool = True
+
+    @property
+    def web_window_open(self) -> bool:
+        return self.mira_web_autonomous
+
     # Money wall: comma-separated substrings matched (lowercased) against a
     # browse URL's netloc, and against a host command's text. Anything that
     # touches one is refused even inside an open window — she may learn about

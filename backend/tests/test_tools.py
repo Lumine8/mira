@@ -785,6 +785,110 @@ def test_research_stays_pending_when_wall_closed(tmp_path: pytest.TempPathFactor
     assert added[0].status == "pending"
 
 
+def test_web_search_auto_approves_when_autonomous(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """Web search is read-only, so with the wall open it runs at once — still
+    fully recorded in pending_changes, result attached, no approval popup."""
+    svc = _with_settings(tmp_path, web_window_open=True)
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._render_web_search",
+        lambda self, query: "Real pages about the weather.",
+    )
+    change = svc.propose_change(
+        "web_search",
+        "she wants to check the weather",
+        {"query": "weather in Portland"},
+    )
+    assert change.status == "approved"
+    assert change.result == "Real pages about the weather."
+    assert change.kind == "web_search"
+
+
+def test_web_search_stays_pending_when_wall_closed(tmp_path: pytest.TempPathFactory) -> None:
+    """With the web-search wall closed, a proposed search stays pending for the
+    user's approval — the old, explicit path."""
+    added: list = []
+
+    class FakeSession:
+        def add(self, obj) -> None:
+            added.append(obj)
+
+        def commit(self) -> None:
+            pass
+
+        def refresh(self, obj) -> None:
+            obj.id = 106
+
+    svc = _with_settings(tmp_path, web_window_open=False)
+    svc.db = FakeSession()
+    change = svc.propose_change(
+        "web_search",
+        "she wants to check the weather",
+        {"query": "weather in Portland"},
+    )
+    assert change.status == "pending"
+    assert change.result is None
+    assert added[0].status == "pending"
+
+
+def test_web_search_requires_query(tmp_path: pytest.TempPathFactory) -> None:
+    svc = _with_settings(tmp_path, web_window_open=True)
+    with pytest.raises(ToolError):
+        svc.propose_change("web_search", "wants to know", {"query": "   "})
+
+
+def test_parse_ddg_results_unwraps_redirects() -> None:
+    """DuckDuckGo wraps result URLs in an escaped uddg= redirect; the parser
+    must unwrap those back to the real page while leaving plain URLs alone."""
+    import app.services.tools.service as tools_module
+
+    body = """
+    <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fweather&amp;rut=abc" class='result-link'>Portland weather today</a>
+    <td class='result-snippet'>Sunny, 21&deg;C, light breeze.</td>
+    <a rel="nofollow" href="https://plain.org/page" class='result-link'>Plain site</a>
+    """
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    out = svc._parse_ddg_results(body)
+    assert len(out) == 2
+    assert out[0]["title"] == "Portland weather today"
+    assert out[0]["url"] == "https://example.com/weather"
+    assert "Sunny" in out[0]["snippet"]
+    assert out[1]["url"] == "https://plain.org/page"
+
+
+def test_render_web_search_has_protocol_header(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
+    """A web search returns ranked links with a search-protocol header, capped
+    to the configured page size."""
+    import app.services.tools.service as tools_module
+
+    body = "\n".join(
+        f'<a rel="nofollow" href="https://site{i}.org/p" class="result-link">{i} thing</a>'
+        f'<td class="result-snippet">snippet {i}</td>'
+        for i in range(12)
+    )
+
+    class _Resp:
+        text = body
+
+        def raise_for_status(self) -> None:
+            pass
+
+    def fake_get(url, params, timeout, headers, follow_redirects):
+        assert url == "https://lite.duckduckgo.com/lite/"
+        assert params["q"] == "weather in Portland"
+        return _Resp()
+
+    monkeypatch.setattr(tools_module.httpx, "get", fake_get)
+    svc = tools_module.ToolService.__new__(tools_module.ToolService)
+    svc._record_skill_tool_run = lambda *a, **k: None
+    out = svc._render_web_search("weather in Portland")
+    assert "DuckDuckGo" in out
+    assert "Search protocol:" in out
+    assert "returned = 12" in out
+    assert "1. 0 thing" in out
+    assert "8. 7 thing" in out
+    assert "9. 8 thing" not in out
+
+
 def test_wikipedia_browse_uses_clean_extract(monkeypatch, tmp_path) -> None:
     """Wikipedia pages go through the REST API extract, which skips the nav
     boilerplate that makes the first ~2400 chars of scraped HTML unreadable."""

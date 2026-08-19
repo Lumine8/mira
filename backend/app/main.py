@@ -12,6 +12,7 @@ from app.core.logging import get_logger, setup_logging
 from app.db.base import Base
 from app.db.session import engine
 from app.deps import get_provider
+from app.services.ai.prompt_builder import warm_weather
 from app.services.mind.service import MindLoop
 from app.services.mote.service import MoteLoop
 from app.services.reminders.service import ReminderLoop
@@ -67,6 +68,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
         threading.Thread(target=_warm_tts, daemon=True).start()
         logger.info("tts pipeline warming in background")
+
+    # Ambient weather is fetched off the request path too, so the very first
+    # reply already knows what the sky is doing instead of paying a network
+    # round-trip inside the first message.
+    warm_weather()
 
     yield
     _shutdown_loops()

@@ -51,3 +51,31 @@ def test_build_messages_always_injects_now_context() -> None:
     body = " ".join(m["content"] for m in messages if m["role"] == "system")
     assert re.search(r"It is \w+, \w+ \d+ — \w+, \d+:\d\d \w+ \(UTC\)", body)
     assert datetime.now(timezone.utc).strftime("%A") in body
+
+
+def test_now_context_includes_cached_weather() -> None:
+    """When the ambient weather cache is populated, the context line carries it
+    so she actually knows what the sky is doing — no network on the reply path."""
+    import app.services.ai.prompt_builder as pb
+
+    old = pb._weather_cache
+    try:
+        pb._weather_cache = {"at": __import__("time").time(), "text": "Partly cloudy, 21°C, humidity 55%", "busy": False}
+        ctx = pb.now_context()
+        assert "The weather outside: Partly cloudy" in ctx
+    finally:
+        pb._weather_cache = old
+
+
+def test_now_context_omits_weather_when_unavailable() -> None:
+    """Without weather the context is just the moment — never a hang, never a
+    broken line."""
+    import app.services.ai.prompt_builder as pb
+
+    old = pb._weather_cache
+    try:
+        pb._weather_cache = {"at": __import__("time").time(), "text": None, "busy": False}
+        ctx = pb.now_context()
+        assert "The weather outside" not in ctx
+    finally:
+        pb._weather_cache = old

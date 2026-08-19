@@ -43,6 +43,7 @@ SKILL_STATUSES = {"draft", "active", "deprecated"}
 # claiming anything that lives behind the internet wall or the shell.
 SAFE_SKILL_TOOLS = {
     "research_query",
+    "web_search",
     "browse_url",
     "host_read",
     "skill_load",

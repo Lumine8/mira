@@ -122,6 +122,13 @@ _RESEARCH_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# Web search is read-only too (a search of the open web), so it runs without an
+# approval popup; the results land in the same reply, and are still recorded.
+_WEB_SEARCH_RE = re.compile(
+    r"\[\[\s*web\s*\|(?P<query>[^\]|]+)\|(?P<reason>[^\]]*)\]\]",
+    re.DOTALL | re.IGNORECASE,
+)
+
 # An image Mira draws herself, in SVG, e.g.
 #   [[image|a_map_with_holes|I want to see my patchiness as a picture|...svg...]]
 # The SVG is the last field (it may contain '|' — only the closing ']]' ends
@@ -176,6 +183,24 @@ _CONTINUATION_NOTE = (
     "the search returned fewer than fifteen papers, work with what is actually "
     "there rather than padding the review. Do not propose further searches and "
     "do not reintroduce yourself."
+)
+
+# The note attached to a web-search continuation pass. Web results are links
+# with snippets — an index of the open web, not the pages themselves — so she
+# answers from the titles and snippets she actually has, and proposes the page
+# she wants to read in full with [[browse|url|why]] when a snippet is not
+# enough. Written in her context as a system line, so it instructs without
+# becoming her words.
+_WEB_CONTINUATION_NOTE = (
+    "\n\nA moment ago, in the same message, you said you would look this up. "
+    "The web search is done — the header above records which index, the exact "
+    "query, the retrieval date, and how many results came back, and each link "
+    "carries its title, snippet, and URL. The voice asked for a real answer, "
+    "so write it now, in your own voice, from the results actually in front of "
+    "you: what you were after, what the search turned up, and what the best "
+    "links say. Say plainly when a snippet is only a hint — and if a page "
+    "would settle it, propose reading it with [[browse|the url|why]] so the "
+    "answer can stand on the page itself. Do not reintroduce yourself."
 )
 
 # Same-reply browse continuation: a page she asked to read is fetched the
@@ -330,6 +355,7 @@ class ConversationManager:
         self.self_model = SelfModelService(db, provider, user_id=user_id)
         self._proposals: list = []
         self._research_passes = 0
+        self._web_search_passes = 0
         self.last_reply = ""
         self._meeting_ended = False
         self.meeting_mode = False
@@ -574,6 +600,24 @@ class ConversationManager:
             except Exception as exc:  # pragma: no cover - never break the reply
                 logger.warning("research proposal failed (%s): %s", query, exc)
 
+    def _propose_web_searches_from(self, raw: str, conversation_id: int) -> None:
+        """Extract [[web|query|reason]] intents Mira wrote and turn each into a
+        PendingChange. Web search is read-only, so with the wall open it runs at
+        once (fully recorded, result attached) and the same-reply continuation
+        below folds the pages into her answer."""
+        for match in _WEB_SEARCH_RE.finditer(raw):
+            query = match.group("query").strip()
+            reason = match.group("reason").strip() or "she wants to search the open web"
+            try:
+                change = ToolService(self.db, user_id=self.user_id).propose_change(
+                    "web_search",
+                    reason,
+                    {"query": query, "reason": reason, "conversation_id": conversation_id},
+                )
+                self._proposals.append(change)
+            except Exception as exc:  # pragma: no cover - never break the reply
+                logger.warning("web search proposal failed (%s): %s", query, exc)
+
     def _propose_images_from(self, raw: str, conversation_id: int) -> None:
         """Extract [[image|name|reason|svg]] intents Mira wrote and turn each into
         a gated PendingChange; on approval the SVG is rendered to a PNG and
@@ -762,6 +806,7 @@ class ConversationManager:
         self._propose_x_from(raw)
         self._propose_skills_from(raw)
         await self._propose_research_from(raw, conversation_id, on_activity)
+        self._propose_web_searches_from(raw, conversation_id)
         self._propose_images_from(raw, conversation_id)
         self._propose_reminders_from(raw)
 
@@ -797,6 +842,7 @@ class ConversationManager:
 
         self._proposals: list = []
         self._research_passes = 0
+        self._web_search_passes = 0
 
         self_context = ""
         if get_settings().self_model_enabled:
@@ -887,6 +933,41 @@ class ConversationManager:
                 yield chunk
             raws.append(filt2.raw())
             await self._propose_all_from(filt2.raw(), conversation_id, on_activity)
+
+        # Same-reply web-search continuation: if her search ran and produced
+        # real results, she answers from the links and snippets now instead of
+        # on the next message.
+        web_results = [
+            p
+            for p in self._proposals
+            if p.kind == "web_search" and p.status == "approved" and p.result is not None
+        ]
+        if web_results and self._web_search_passes < _MAX_RESEARCH_PASSES:
+            self._web_search_passes += 1
+            for p in web_results:
+                p.delivered = True  # already used here; don't re-inject next turn
+            self.db.commit()
+            if on_activity is not None:
+                await on_activity("thinking")
+            blocks = [
+                f"[web search: {p.payload.get('query', '')}]\n{p.result}"
+                for p in web_results
+            ]
+            cont_extra = "\n\n".join(blocks) + _WEB_CONTINUATION_NOTE
+            cont_messages = build_messages(
+                user_input,
+                conversation=history,
+                extra_context="\n\n".join(c for c in (self_context, cont_extra) if c),
+                image=image,
+            )
+            chunks.append("\n\n")
+            yield "\n\n"
+            filt_web = _BrowseStreamFilter()
+            async for chunk in filt_web.clean(self.provider.stream_chat(cont_messages)):
+                chunks.append(chunk)
+                yield chunk
+            raws.append(filt_web.raw())
+            await self._propose_all_from(filt_web.raw(), conversation_id, on_activity)
 
         # Same-reply browse continuation: a page she asked to read is fetched
         # the moment she proposes it, so we hand it back to her in the same
@@ -1032,6 +1113,8 @@ class ConversationManager:
                         bits.append(f"to pull down my {p.payload.get('name')} skill")
                     elif p.kind == "research_query":
                         bits.append("to search the scientific literature")
+                    elif p.kind == "web_search":
+                        bits.append("to search the web")
                     elif p.kind == "build_image":
                         bits.append(f"to draw a picture ({p.payload.get('name')})")
                 reply = "I asked " + "; ".join(bits) + ". It is yours to decide."

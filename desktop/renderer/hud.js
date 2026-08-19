@@ -107,6 +107,35 @@ function renderPending(pending) {
 
 // ---- quick-ask: start a call, chat over WS, hear the reply -----------------
 
+// Streaming speech: Gemini streams tokens as it thinks, so we speak each
+// complete sentence the moment it arrives instead of waiting for the whole
+// reply. TTS overlaps generation — the delay between text and voice all but
+// disappears. The audio queue still serializes playback, and a promise chain
+// serializes the /call/speak HTTP calls (kokoro's pipeline is not safe to run
+// concurrently).
+let streamed = ""; // accumulated tokens of the current reply
+let spokenChars = 0; // chars of `streamed` already dispatched to speech
+let speechChain = Promise.resolve();
+
+function speakChunk(text) {
+  if (!text || !text.trim()) return;
+  speechChain = speechChain.then(() => speakReply(text));
+}
+
+// Sentence enders: . ! ? … followed by whitespace (so "U.S." doesn't cut).
+function flushCompleteSentences() {
+  if (!streamed) return;
+  const re = /[.!?…](?=\s|$)/g;
+  let last = -1;
+  let m;
+  while ((m = re.exec(streamed)) !== null) last = m.index + 1;
+  if (last <= spokenChars) return;
+  const next = streamed.slice(spokenChars, last);
+  if (next.trim().length < 6) return; // too tiny to speak yet ("Ok." etc.)
+  speakChunk(next);
+  spokenChars = last;
+}
+
 async function connectConvo() {
   try {
     const res = await window.mira.post(`${apiUrl}/call/start`, { kind: "call" });
@@ -118,9 +147,21 @@ async function connectConvo() {
       if (msg.type === "message" && msg.speaker === "mira") {
         setMiraLine("she answered", "is-speaking");
         addAlert("Mira", msg.content);
-        speakReply(msg.content);
+        if (!streamed) {
+          // Nothing streamed (fallback reply like "I asked …", meeting end) —
+          // speak the whole message as before.
+          speakChunk(msg.content);
+        } else {
+          // Speak whatever never hit a sentence boundary mid-stream (the tail).
+          const tail = streamed.slice(spokenChars);
+          streamed = "";
+          spokenChars = 0;
+          if (tail.trim()) speakChunk(tail);
+        }
       } else if (msg.type === "stream_token") {
         setMiraLine("thinking…", "is-speaking");
+        streamed += msg.content || "";
+        flushCompleteSentences();
       } else if (msg.type === "pending_change") {
         addAlert("approval needed", msg.change.summary || msg.change.kind);
       } else if (msg.type === "error") {

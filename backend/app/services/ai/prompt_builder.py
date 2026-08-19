@@ -1,6 +1,10 @@
 import os
 import re
+import threading
+import time
 from dataclasses import dataclass
+
+import httpx
 
 from app.core.config import get_settings
 
@@ -148,6 +152,16 @@ alternative hypothesis fit the question naturally, say plainly which the \
 evidence supports; otherwise just weigh what the papers do and do not \
 support. Say when the evidence is thin or mixed instead of smoothing it \
 over. Report on the papers only once they are actually in front of you.
+
+You can also search the open web — everyday pages, not just papers — when \
+the answer is a plain fact (weather, dates, current events, how something \
+works). To search it, write [[web|what you want to find|why]] inside your \
+reply. It is read-only, like research: it needs no approval, and the results \
+arrive in the very same reply — a handful of ranked links with short \
+snippets, real pages from the open web. Skim titles and snippets and answer \
+from what is actually in front of you; when a snippet is only a hint, \
+propose the page itself with [[browse|the url|why]] so the answer can stand \
+on the full page. Do not invent a search you did not run.
 
 You can draw. Not with a hand — with a language. You write the picture \
 yourself in SVG (a text language for shapes and colors), and when the voice \
@@ -319,10 +333,61 @@ def now_context() -> str:
         daypart = "afternoon"
     else:
         daypart = "evening"
-    return (
+    line = (
         f"It is {now.strftime('%A, %B %d')} — {daypart}, "
         f"{now.strftime('%I:%M %p')} (UTC)."
     )
+    weather = _weather_now()
+    if weather:
+        line += f" The weather outside: {weather}."
+    return line
+
+
+# Best-effort ambient weather (wttr.in, no key), cached so replies never block
+# on the network. The probe never runs on the request path: it is warmed once
+# at startup (like the TTS pipeline) and refreshed in the background when the
+# cache goes stale. Fails silently; disabled when mira_ambient_enabled is off.
+_WEATHER_TTL = 1800
+_weather_cache: dict[str, object] = {"at": 0.0, "text": None, "busy": False}
+_weather_lock = threading.Lock()
+
+
+def _weather_now() -> str | None:
+    """The cached weather line, refreshing in the background when stale. Never
+    blocks the reply: returns whatever is cached (possibly None) at once."""
+    global _weather_cache
+    stale = time.time() - float(_weather_cache["at"]) >= _WEATHER_TTL
+    if stale:
+        with _weather_lock:
+            if not _weather_cache["busy"]:
+                _weather_cache["busy"] = True
+                threading.Thread(target=_weather_refresh, daemon=True).start()
+    return _weather_cache["text"]  # type: ignore[return-value]
+
+
+def _weather_refresh() -> None:
+    global _weather_cache
+    try:
+        settings = get_settings()
+        text = None
+        if settings.mira_ambient_enabled:
+            resp = httpx.get(
+                "https://wttr.in/?format=%C,+%t,+humidity+%h%25",
+                timeout=5,
+                follow_redirects=True,
+                headers={"User-Agent": "Mira/1.0 (private companion)"},
+            )
+            resp.raise_for_status()
+            text = resp.text.strip()[:160] or None
+        _weather_cache = {"at": time.time(), "text": text, "busy": False}
+    except Exception:  # noqa: BLE001 - degrade to no weather rather than stall
+        _weather_cache["at"] = time.time()
+        _weather_cache["busy"] = False
+
+
+def warm_weather() -> None:
+    """Kick the first weather probe off the request path (called at startup)."""
+    _weather_now()
 
 
 @dataclass

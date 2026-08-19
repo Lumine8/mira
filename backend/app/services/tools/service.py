@@ -82,6 +82,13 @@ _MAX_RESEARCH_QUERY = 300
 _RESEARCH_PAGE_SIZE = 20
 _MAX_RESEARCH_ABSTRACT = 480
 _MAX_RESEARCH_RESULTS = 20_000
+# General web search (DuckDuckGo HTML, no key): a real search of the open web.
+# Read-only like reading — no approval, fully recorded. Returns ranked links
+# with short snippets; she browses the ones she wants by URL.
+_MAX_WEB_QUERY = 300
+_WEB_PAGE_SIZE = 8
+_MAX_WEB_SNIPPET = 240
+_MAX_WEB_RESULTS = 12_000
 # Mira's skill shelf: pages she wrote herself in data/self/skills. Loading one
 # is read-only — it is her own mind, so it needs no approval.
 _MAX_SKILL_BYTES = 24_000
@@ -280,6 +287,12 @@ class ToolService:
                 raise ToolError("research_query needs a query (what she wants to find)")
             if len(query) > _MAX_RESEARCH_QUERY:
                 raise ToolError(f"research_query too long ({len(query)} > {_MAX_RESEARCH_QUERY})")
+        if kind == "web_search":
+            query = payload.get("query", "").strip()
+            if not query:
+                raise ToolError("web_search needs a query (what she wants to find)")
+            if len(query) > _MAX_WEB_QUERY:
+                raise ToolError(f"web_search too long ({len(query)} > {_MAX_WEB_QUERY})")
         if kind == "remind":
             title = payload.get("title", "").strip()
             when = (payload.get("when", "") or "").strip()
@@ -395,6 +408,15 @@ class ToolService:
             # in pending_changes, and the result is delivered into her next
             # context (and, when she is mid-turn, into the same reply).
             change.result = self._render_research(payload.get("query", ""))
+            change.status = "approved"
+            change.resolved_at = datetime.now(UTC)
+            self.db.commit()
+            self.db.refresh(change)
+        if kind == "web_search" and get_settings().web_window_open:
+            # Searching the open web is read-only too — it returns links and
+            # snippets and changes nothing, so it needs no approval. Fully
+            # recorded like research, delivered into the same reply mid-turn.
+            change.result = self._render_web_search(payload.get("query", ""))
             change.status = "approved"
             change.resolved_at = datetime.now(UTC)
             self.db.commit()
@@ -515,6 +537,10 @@ class ToolService:
             query = change.payload.get("query", "")
             change.result = self._render_research(query)
             self._record_skill_tool_run("research_query", query, change.result)
+        elif change.kind == "web_search":
+            query = change.payload.get("query", "")
+            change.result = self._render_web_search(query)
+            self._record_skill_tool_run("web_search", query, change.result)
         elif change.kind == "build_image":
             change.result = self._render_build_image(
                 change.payload.get("name", ""),
@@ -814,6 +840,115 @@ class ToolService:
 
         out = "\n".join(parts)
         return out[:_MAX_RESEARCH_RESULTS] + ("\n… (truncated)" if len(out) > _MAX_RESEARCH_RESULTS else "")
+
+    # -- web search (the open web) ------------------------------------------
+
+    def _render_web_search(self, query: str) -> str:
+        """Search the open web (DuckDuckGo HTML, no key) and reduce the results
+        to ranked links with short snippets. The header records the protocol —
+        which index, which query, when, how many results — so her answer can
+        stand on a real search and not a guess.
+
+        She reads the actual pages the same way she reads anything else: by
+        proposing the URL, which the browse tool fetches for her.
+        """
+        query = query.strip()[: _MAX_WEB_QUERY]
+        try:
+            resp = httpx.get(
+                "https://lite.duckduckgo.com/lite/",
+                params={"q": query},
+                timeout=_BROWSE_TIMEOUT,
+                headers={
+                    "User-Agent": _BROWSE_UA,
+                    "Accept-Language": "en",
+                },
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            body = resp.text
+        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            logger.warning("web search failed (%s): %s", query, exc)
+            return f"[error] could not search the web: {exc}"
+
+        results = self._parse_ddg_results(body)
+        if not results:
+            return (
+                "This is a real search of the open web (DuckDuckGo), and it "
+                f"returned nothing readable for: {query!r}. The absence can be "
+                "a finding — try plainer words, or propose a specific page to "
+                "read directly."
+            )
+
+        parts = [
+            "These are real pages from the open web (DuckDuckGo), not guesses. "
+            f"Search protocol: index = DuckDuckGo HTML; query = {query!r}; "
+            f"retrieval date = {datetime.now(UTC).strftime('%Y-%m-%d')}; "
+            f"returned = {len(results)} results. Skim titles and snippets, "
+            "then propose the page you actually want to read with "
+            "[[browse|the url|why]].",
+            "",
+        ]
+        for i, r in enumerate(results[: _WEB_PAGE_SIZE], start=1):
+            title = r["title"]
+            url = r["url"]
+            parts.append(f"{i}. {title}")
+            if r.get("snippet"):
+                parts.append(f"   {r['snippet']}")
+            parts.append(f"   {url}")
+
+        out = "\n".join(parts)
+        return out[:_MAX_WEB_RESULTS] + ("\n… (truncated)" if len(out) > _MAX_WEB_RESULTS else "")
+
+    def _parse_ddg_results(self, body: str) -> list[dict]:
+        """Pull title/url/snippet triples out of DuckDuckGo's HTML results page.
+        Each result is a <a rel="nofollow" href="...uddg=redirect..." class='result-link'>title</a>
+        followed by a snippet in a <td class='result-snippet'>...</td>. Links are
+        escaped by DuckDuckGo (uddg= redirects); those decode back to the real
+        URL."""
+        found: list[dict] = []
+        # Split on each result anchor, keeping the anchor with its trailing block
+        # (snippet and display URL) so triples stay together.
+        for piece in re.split(r'(?=<a[^>]*class=["\']result-link["\'][^>]*>)', body)[1:]:
+            title_m = re.search(
+                r'<a(?=[^>]*class=["\']result-link["\'])(?=[^>]*href=["\'](?P<href>[^"\']+)["\'])[^>]*>(?P<title>.*?)</a>',
+                piece,
+                re.DOTALL,
+            )
+            snippet_m = re.search(
+                r'<td[^>]*class=["\']result-snippet["\'][^>]*>(?P<snippet>.*?)</td>',
+                piece,
+                re.DOTALL,
+            )
+            if not title_m:
+                continue
+            title = re.sub(r"<[^>]+>", "", title_m.group("title"))
+            title = html.unescape(title).strip()
+            if not title:
+                continue
+            href = html.unescape(title_m.group("href")).strip()
+            url = self._ddg_real_url(href)
+            if not url:
+                continue
+            snippet = ""
+            if snippet_m:
+                snippet = re.sub(r"<[^>]+>", "", snippet_m.group("snippet"))
+                snippet = html.unescape(snippet).strip()
+                if len(snippet) > _MAX_WEB_SNIPPET:
+                    snippet = snippet[:_MAX_WEB_SNIPPET].rstrip() + "…"
+            found.append({"title": title, "url": url, "snippet": snippet})
+        return found
+
+    def _ddg_real_url(self, href: str) -> str:
+        """DuckDuckGo wraps real URLs in an escaped uddg= redirect; unwrap it.
+        Plain http(s) links pass through untouched."""
+        from urllib.parse import unquote
+
+        m = re.search(r"(?:[?&])uddg=([^&]+)", href)
+        if m:
+            return unquote(m.group(1))
+        if href.startswith(("http://", "https://")):
+            return href
+        return ""
 
     # -- her image studio ----------------------------------------------------
 

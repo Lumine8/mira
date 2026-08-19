@@ -241,9 +241,14 @@ class _ResearchSettings:
     browse_window_open = False
     host_window_open = False
     research_window_open = True
+    web_window_open = True
     mira_browse_allowed_domains = ""
     mira_money_deny_domains = ""
     mira_money_deny_commands = ""
+
+
+class _WebSettings(_ResearchSettings):
+    pass
 
 
 @pytest.mark.asyncio
@@ -312,6 +317,58 @@ async def test_research_runs_and_continues_in_same_reply(monkeypatch) -> None:
     proposals = mgr.proposals()
     assert len(proposals) == 1
     assert proposals[0].kind == "research_query"
+    assert proposals[0].status == "approved"
+    assert proposals[0].delivered is True
+
+
+@pytest.mark.asyncio
+async def test_web_search_runs_and_continues_in_same_reply(monkeypatch) -> None:
+    """Web search runs on its own (no approval) and its results are folded into
+    the SAME reply via a continuation pass — she answers from the links without
+    the voice having to nudge again."""
+    import app.services.tools.service as tools_module
+
+    monkeypatch.setattr(manager_module, "get_settings", lambda: _WebSettings())
+    monkeypatch.setattr(tools_module, "get_settings", lambda: _WebSettings())
+    monkeypatch.setattr(
+        "app.services.tools.service.ToolService._render_web_search",
+        lambda self, query: "1. Portland weather\n   Sunny today\n   https://weather.example/portland",
+    )
+
+    conv = Conversation(kind="text", user_id=1)
+    conv.id = 43
+    session = RecordingSession(conv)
+
+    provider = FakeProvider(
+        [
+            "I can search the open web. [[web|weather in Portland|check today]]",
+            "Here is what the search found: Portland is sunny today.",
+        ]
+    )
+    mgr = ConversationManager(session, provider, user_id=1)
+
+    streamed: list[str] = []
+    async for token in mgr.generate_reply(
+        43,
+        "what is the weather in Portland?",
+        source="text",
+    ):
+        streamed.append(token)
+
+    joined = "".join(streamed)
+    assert "[[web" not in joined
+    assert "I can search the open web." in joined
+    assert "Here is what the search found" in joined
+
+    assert len(provider._calls) == 2
+    cont_text = "\n".join(m.get("content", "") for m in provider._calls[1])
+    assert "Sunny today" in cont_text
+    assert "web search: weather in Portland" in cont_text
+    assert "A moment ago, in the same message" in cont_text
+
+    proposals = mgr.proposals()
+    assert len(proposals) == 1
+    assert proposals[0].kind == "web_search"
     assert proposals[0].status == "approved"
     assert proposals[0].delivered is True
 

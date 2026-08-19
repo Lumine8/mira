@@ -45,6 +45,8 @@ def _delivery_text(d: PendingChange) -> str:
         # "other" budget left her with only titles and no abstracts. Give it
         # the same room a browsed page gets, so the skill can actually answer.
         return body[:_BROWSE_DELIVERY_CHARS]
+    if d.kind == "web_search":
+        return body[:_BROWSE_DELIVERY_CHARS]
     if d.kind == "skill_load":
         return body[:_SKILL_DELIVERY_CHARS]
     return body[:_OTHER_DELIVERY_CHARS]
@@ -263,7 +265,7 @@ class SelfModelService:
                 .where(
                     PendingChange.user_id == self.user_id,
                     PendingChange.kind.in_(
-                        ["browse_url", "listen_song", "host_command", "host_read", "x_read", "x_post", "skill_load", "research_query"]
+                        ["browse_url", "listen_song", "host_command", "host_read", "x_read", "x_post", "skill_load", "research_query", "web_search"]
                     ),
                     PendingChange.status == "approved",
                     PendingChange.result.isnot(None),
@@ -335,6 +337,8 @@ class SelfModelService:
                 skills.append(f"[a book from your own shelf — {d.payload.get('name', '')}]\n{body}")
             elif d.kind == "research_query":
                 papers.append(f"[search of the scientific record: {d.payload.get('query', '')}]\n{body}")
+            elif d.kind == "web_search":
+                papers.append(f"[web search: {d.payload.get('query', '')}]\n{body}")
             else:
                 seen.append(f"{d.payload.get('url', '')} — {body}")
         if seen:
