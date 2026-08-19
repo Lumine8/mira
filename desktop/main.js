@@ -110,6 +110,7 @@ function createMainWindow() {
     // Backend not up yet (native mode): show a warm waiting page with a retry
     // instead of a frozen blank window.
     if (code === -3) return; // aborted by a newer navigation, ignore
+    const target = JSON.stringify(withToken(liveBase()));
     mainWindow.loadURL(
       "data:text/html;charset=utf-8," +
         encodeURIComponent(
@@ -130,12 +131,16 @@ function createMainWindow() {
             `padding:8px 18px;font-size:13px;cursor:pointer;font-family:system-ui,sans-serif}` +
             `button:hover{background:#3a3024}</style></head><body>` +
             `<div class="w"><div class="o"></div><h1>waiting for Mira</h1>` +
-            `<p>the backend isn't reachable at ${escapeHtml(WEB_URL)} yet.<br>` +
+            `<p>the backend isn't reachable at ${escapeHtml(liveBase())} yet.<br>` +
             (hasPortableRuntime()
-              ? `the stack is starting — give it a moment.`
+              ? `the stack is starting — this can take a minute on first launch.`
               : `start it with scripts/start_native.ps1`) +
             `</p>` +
-            `<button onclick="location.reload()">try again</button></div></body></html>`,
+            `<button onclick="location.href=${target}">try again</button></div>` +
+            `<script>` +
+            `(function(){var t=${target};` +
+            `setTimeout(function(){location.href=t;},4000);})();` +
+            `</script></body></html>`,
         ),
     );
   });
@@ -405,9 +410,20 @@ function startStack() {
   stack = new MiraStack();
   stack.onChange = (s) => {
     if (mainWindow && mainWindow.webContents) mainWindow.webContents.send("mira:stack", s);
+    if (!s) return;
+    const target = withToken(s.baseUrl || WEB_URL);
+    // Backend came up (or moved to a free port): if the window is still on the
+    // waiting page, navigate to the live Mira UI instead of making the user
+    // hit "try again" once the cold start finally finishes.
+    if (mainWindow && mainWindow.webContents && s.healthy) {
+      const current = mainWindow.webContents.getURL() || "";
+      if (current.startsWith("data:text/html") || !current.startsWith(s.baseUrl || WEB_URL)) {
+        mainWindow.loadURL(target);
+      }
+    }
     // If the stack had to move off the default port (a foreign backend was
     // squatting on 8000), point the window and HUD at where Mira actually is.
-    if (s && s.baseUrl && s.baseUrl !== WEB_URL && s.baseUrl !== API_URL) {
+    if (s.baseUrl && s.baseUrl !== WEB_URL && s.baseUrl !== API_URL) {
       if (mainWindow && mainWindow.webContents) {
         const current = mainWindow.webContents.getURL() || "";
         if (!current.startsWith(s.baseUrl)) mainWindow.loadURL(withToken(s.baseUrl));
