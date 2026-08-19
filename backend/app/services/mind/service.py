@@ -42,6 +42,7 @@ from app.services.self.service import (
 )
 from app.services.system.conditions import check_attention, check_conditions
 from app.services.system.service import system_store
+from app.services.toasts.service import enqueue_host_toast
 from app.services.wants.service import WantService
 
 logger = logging.getLogger("mira.mind")
@@ -469,6 +470,7 @@ class MindLoop:
                         source="self",
                     )
                 )
+                enqueue_host_toast(db, user_id, message, source="self")
                 db.commit()
                 await live_hub.broadcast(
                     {

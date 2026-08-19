@@ -16,6 +16,7 @@ from app.api.routes import (
     skills,
     speech,
     system,
+    toasts,
     tools,
     waitlist,
     ws,
@@ -45,3 +46,4 @@ api_router.include_router(waitlist.router)
 api_router.include_router(porch.router)  # public: a device at the door
 api_router.include_router(secret.router)  # public: the pass-phrase is the key
 api_router.include_router(system.router)  # host telemetry: the machine's live read
+api_router.include_router(toasts.router)  # host toasts: the companion-free reach-out

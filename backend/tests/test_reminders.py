@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Conversation, Message, PendingChange, Reminder, User
+from app.models import Conversation, HostToast, Message, PendingChange, Reminder, User
 from app.services.reminders.service import ReminderLoop, ReminderService, _fire_line, parse_when
 
 
@@ -16,6 +16,7 @@ def db():
     Conversation.__table__.create(engine)
     Message.__table__.create(engine)
     PendingChange.__table__.create(engine)
+    HostToast.__table__.create(engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
@@ -31,6 +32,7 @@ def sessionmaker_factory():
     Conversation.__table__.create(engine)
     Message.__table__.create(engine)
     PendingChange.__table__.create(engine)
+    HostToast.__table__.create(engine)
     return sessionmaker(bind=engine)
 
 

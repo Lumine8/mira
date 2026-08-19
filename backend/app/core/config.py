@@ -173,6 +173,12 @@ class Settings(BaseSettings):
     # replies; this is her reaching out on her own.
     tts_announce_self_messages: bool = True
 
+    # Host toasts: every self-initiated reach-out (mind-loop messages and fired
+    # reminders) is also queued in host_toasts for a small PowerShell poller to
+    # pop as a native Windows toast — the companion-free path. The Electron
+    # companion keeps showing its own alerts over the live hub either way.
+    host_toasts_enabled: bool = True
+
     scheduler_enabled: bool = True
     self_model_enabled: bool = True
 

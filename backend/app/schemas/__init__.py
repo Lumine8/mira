@@ -32,6 +32,7 @@ from app.schemas.porch import PorchStartOut
 from app.schemas.reminder import ReminderIn, ReminderOut
 from app.schemas.secret import SecretDoorIn, SecretDoorOut, SecretRoomOut
 from app.schemas.system import ProcessSample, SystemSnapshot, SystemSnapshotOut
+from app.schemas.toast import HostToastOut
 from app.schemas.waitlist import (
     WaitlistAdmit,
     WaitlistEntryOut,
@@ -53,6 +54,7 @@ __all__ = [
     "ConversationDetailOut",
     "ConversationOut",
     "HealthResponse",
+    "HostToastOut",
     "MagicLinkRequest",
     "MagicLinkVerify",
     "MemoryOut",

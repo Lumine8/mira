@@ -21,6 +21,7 @@ from app.models.state import (
     Thought,
     UserSettings,
 )
+from app.models.toast import HostToast
 from app.models.user import (
     FOUNDER_ROLE,
     GUEST_ROLE,
@@ -67,6 +68,7 @@ __all__ = [
     "WANT_STATUSES",
     "Conversation",
     "ConversationImpression",
+    "HostToast",
     "MagicLink",
     "Memory",
     "MemoryEmbedding",

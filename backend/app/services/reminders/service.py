@@ -20,6 +20,7 @@ from app.db.session import SessionLocal
 from app.models import REMINDER_KINDS, Conversation, Message, Reminder
 from app.services.broadcast import live_hub
 from app.services.identity import founder_user_id
+from app.services.toasts.service import enqueue_host_toast
 
 logger = logging.getLogger("mira.reminders")
 
@@ -273,6 +274,7 @@ class ReminderLoop:
                 source="reminder",
             )
         )
+        enqueue_host_toast(db, user_id, line, source="reminder", title="Reminder")
         db.commit()
         db.refresh(item)
         await live_hub.broadcast(
