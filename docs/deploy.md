@@ -68,6 +68,17 @@ Internet ──HTTPS──▶ Cloudflare edge ──named tunnel "mira"──▶
   `http://localhost:8080` with a `404` catch-all.
 - **Service** — a Windows service named `cloudflared` runs
   `cloudflared tunnel --config … run mira`, is `Automatic`, and starts on boot.
+  It runs as **LocalSystem**, so it reads its config from the SYSTEM profile
+  (`C:\Windows\System32\config\systemprofile\.cloudflared`), not the human
+  user's. If the service is stopped with exit code **1067**, that directory is
+  empty — fix it once, elevated:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\fix_cloudflared_service.ps1
+  ```
+  The script copies `config.yml`, `cert.pem`, and the tunnel credentials into
+  the SYSTEM profile, points the config's `credentials-file` at the SYSTEM copy,
+  realigns the service binary path, and starts it — so the tunnel survives
+  reboots without an elevated shell babysitting it.
 
 ### Shape B — host shell away, keep memory in a free cloud Postgres
 
