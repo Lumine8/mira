@@ -33,6 +33,7 @@ from app.models import Message, PendingChange
 from app.services.broadcast import broadcast_later
 from app.services.export import schedule_archive_write
 from app.services.identity import founder_user_id
+from app.services.reminders.service import parse_when
 from app.services.skills import SkillError
 from app.services.skills.registry import SkillRegistry
 from app.services.skills.runner import SkillRunner
@@ -279,6 +280,18 @@ class ToolService:
                 raise ToolError("research_query needs a query (what she wants to find)")
             if len(query) > _MAX_RESEARCH_QUERY:
                 raise ToolError(f"research_query too long ({len(query)} > {_MAX_RESEARCH_QUERY})")
+        if kind == "remind":
+            title = payload.get("title", "").strip()
+            when = (payload.get("when", "") or "").strip()
+            if not title:
+                raise ToolError("remind needs the thing to hold (title)")
+            if len(title) > 500:
+                raise ToolError("remind title too long")
+            if not when:
+                raise ToolError("remind needs a when — in 2 hours, tomorrow at 9am, or an exact moment")
+            parsed_when = parse_when(when)
+            if parsed_when is None:
+                raise ToolError(f"remind couldn't make sense of when: {when!r}")
         if kind == "build_image":
             name = payload.get("name", "").strip().lower()
             if not _IMAGE_NAME_RE.match(name):
@@ -382,6 +395,26 @@ class ToolService:
             # in pending_changes, and the result is delivered into her next
             # context (and, when she is mid-turn, into the same reply).
             change.result = self._render_research(payload.get("query", ""))
+            change.status = "approved"
+            change.resolved_at = datetime.now(UTC)
+            self.db.commit()
+            self.db.refresh(change)
+        if kind == "remind":
+            # Holding something for the voice is a private, reversible calendar
+            # row — not a change to the world. It applies at once (fully
+            # recorded in pending_changes like every other tool) and the
+            # reminders loop fires it when due.
+            from app.services.reminders.service import ReminderService
+
+            due = parse_when(payload.get("when", ""))
+            note = (payload.get("reason", "") or "").strip() or None
+            reminder = ReminderService(self.db, user_id=self.user_id).create(
+                title=payload.get("title", "").strip(),
+                kind="reminder",
+                due_at=due,
+                note=note,
+            )
+            change.result = f"held: {reminder.title} (due {due})"
             change.status = "approved"
             change.resolved_at = datetime.now(UTC)
             self.db.commit()

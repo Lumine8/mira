@@ -11,6 +11,7 @@ from app.api.routes import (
     moderation,
     mote,
     porch,
+    reminders,
     secret,
     skills,
     speech,
@@ -32,6 +33,7 @@ api_router.include_router(history.router)
 api_router.include_router(mira.router)
 api_router.include_router(moderation.router)
 api_router.include_router(mote.router)
+api_router.include_router(reminders.router)
 api_router.include_router(skills.router)
 api_router.include_router(speech.router)
 api_router.include_router(documents.router)

@@ -9,6 +9,7 @@ from app.models.moderation import (
 )
 from app.models.mote import MoteSharedTime
 from app.models.questions import QUESTION_SOURCES, QUESTION_STATUSES, Question
+from app.models.reminder import REMINDER_KINDS, Reminder
 from app.models.skills import SkillEvaluation, SkillRun, SkillVersion
 from app.models.state import (
     MiraState,
@@ -52,6 +53,7 @@ __all__ = [
     "PERSON_ROLE",
     "QUESTION_SOURCES",
     "QUESTION_STATUSES",
+    "REMINDER_KINDS",
     "REPLICA_ROLE",
     "SESSION_TTL_DAYS",
     "USER_ACTIVE",
@@ -78,6 +80,7 @@ __all__ = [
     "PerceivedEvent",
     "Question",
     "Relationship",
+    "Reminder",
     "SchedulerLog",
     "SkillEvaluation",
     "SkillRun",

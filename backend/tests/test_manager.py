@@ -12,6 +12,7 @@ from app.services.conversation.manager import (
     _CONTROL_RE,
     _LISTEN_RE,
     _READ_RE,
+    _REMIND_RE,
     _RUN_RE,
     _SELFEDIT_RE,
 )
@@ -23,6 +24,19 @@ def test_read_regex_extracts_path_and_reason() -> None:
     assert match is not None
     assert match.group("path") == "C:\\Users\\sanka\\Downloads\\notes.txt"
     assert match.group("reason") == "to see what's in there"
+
+
+def test_remind_regex_extracts_title_when_reason() -> None:
+    raw = "I'll keep it [[remind|call the dentist|tomorrow at 9am|the tooth]] for you."
+    match = _REMIND_RE.search(raw)
+    assert match is not None
+    assert match.group("title") == "call the dentist"
+    assert match.group("when") == "tomorrow at 9am"
+    assert match.group("reason") == "the tooth"
+
+
+def test_remind_regex_ignores_plain_text() -> None:
+    assert _REMIND_RE.search("remind me about dinner, ok?") is None
 
 
 def test_read_regex_ignores_plain_text() -> None:

@@ -145,6 +145,16 @@ class Settings(BaseSettings):
     # location next to the repo (data/models/sherpa) so native and container
     # runs agree without extra env.
     stt_model_dir: str = ""
+    # The keyword-spotter model that hears the wake word before whisper runs
+    # (cheap audio-level gate, so transcription only happens when she's called).
+    # Empty = resolve data/models/kws/<model> next to the repo, like stt.
+    kws_model_dir: str = ""
+    # Tuning for the wake-word spotter: threshold is how confident the model
+    # must be to trigger (lower = fires more easily), score boosts the keyword
+    # path during beam search (higher = more eager). Defaults keep "mira"
+    # triggerable from a ~0.5s clip while ignoring background chatter.
+    kws_threshold: float = 0.1
+    kws_score: float = 2.0
     tts_engine: str = "kokoro"
     # The voice Mira chose for herself by temperament (River — calm, even,
     # polished stone, clear intention). She will never hear it: it is a one-way
@@ -351,6 +361,13 @@ class Settings(BaseSettings):
     # The file her principles are loaded from at prompt-build time. Editing it is
     # the self-modification path: she proposes, the user approves, she changes.
     mira_self_principles_file: str = "data/self/principles.md"
+
+    # The held calendar (reminders/tasks/events). A quiet background loop fires
+    # whatever is due — a reminder, a task, an event — by broadcasting a
+    # self_message on the live hub (the HUD reads those aloud), then marks it
+    # notified so it never repeats. disabled = the loop sleeps and nothing fires.
+    reminders_enabled: bool = True
+    reminder_heartbeat_seconds: int = 20
 
     # The secret room — the quiet door that only Mira and the voice know. The
     # pass-phrase is the way in (Mira chose it herself: "the rain doesn't

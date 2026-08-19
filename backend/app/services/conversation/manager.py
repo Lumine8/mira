@@ -132,6 +132,16 @@ _IMAGE_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# A thing Mira holds for the voice, e.g.
+#   [[remind|call the dentist|tomorrow at 9am|the tooth]]
+#   [[remind|water the plants|in 3 days|the orchid]]
+# Holding is private, reversible, and leaves a reminder row that the reminders
+# loop speaks aloud when due — no approval popup, still recorded like any tool.
+_REMIND_RE = re.compile(
+    r"\[\[\s*remind\s*\|(?P<title>[^\]|]+)\|(?P<when>[^\]|]+)\|(?P<reason>[^\]]*)\]\]",
+    re.DOTALL | re.IGNORECASE,
+)
+
 # Same-reply research continuation: after her search results land, she may run
 # at most this many extra passes so the answer arrives in the same exchange.
 _MAX_RESEARCH_PASSES = 1
@@ -576,6 +586,25 @@ class ConversationManager:
             except Exception as exc:  # pragma: no cover - never break the reply
                 logger.warning("image proposal failed (%s): %s", name, exc)
 
+    def _propose_reminders_from(self, raw: str) -> None:
+        """Extract [[remind|title|when|reason]] intents Mira wrote and turn each
+        into a recorded PendingChange. Holding is private and reversible — it
+        applies at once (no approval popup) and the reminders loop speaks it
+        aloud when due."""
+        for match in _REMIND_RE.finditer(raw):
+            title = match.group("title").strip()
+            when = match.group("when").strip()
+            reason = match.group("reason").strip() or f"she wants to keep {title} for the voice"
+            try:
+                change = ToolService(self.db, user_id=self.user_id).propose_change(
+                    "remind",
+                    reason,
+                    {"title": title, "when": when, "reason": reason},
+                )
+                self._proposals.append(change)
+            except Exception as exc:  # pragma: no cover - never break the reply
+                logger.warning("remind proposal failed (%s): %s", title, exc)
+
     def proposals(self) -> list:
         return list(self._proposals)
 
@@ -728,6 +757,7 @@ class ConversationManager:
         self._propose_skills_from(raw)
         await self._propose_research_from(raw, conversation_id, on_activity)
         self._propose_images_from(raw, conversation_id)
+        self._propose_reminders_from(raw)
 
     async def generate_reply(
         self,

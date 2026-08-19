@@ -29,6 +29,7 @@ from app.schemas.moderation import (
 )
 from app.schemas.mote import MotePresenceOut, MoteSharedTimeOut
 from app.schemas.porch import PorchStartOut
+from app.schemas.reminder import ReminderIn, ReminderOut
 from app.schemas.secret import SecretDoorIn, SecretDoorOut, SecretRoomOut
 from app.schemas.system import ProcessSample, SystemSnapshot, SystemSnapshotOut
 from app.schemas.waitlist import (
@@ -73,6 +74,8 @@ __all__ = [
     "ProposeChangeIn",
     "QuestionOut",
     "RelationshipOut",
+    "ReminderIn",
+    "ReminderOut",
     "SecretDoorIn",
     "SecretDoorOut",
     "SecretRoomOut",
