@@ -446,6 +446,28 @@ async function init() {
   setInterval(refresh, 10000);
   connectLive();
 
+  // The stack may have had to move to a free port (a foreign backend on 8000).
+  // Point every request at the live base and reconnect once.
+  if (window.mira.onApiUrl) {
+    window.mira.onApiUrl((url) => {
+      if (!url || url === apiUrl) return;
+      apiUrl = url;
+      if (liveWs) {
+        liveWs.onclose = null;
+        try { liveWs.close(); } catch { /* already closed */ }
+        liveWs = null;
+      }
+      if (convoWs) {
+        convoWs.onclose = null;
+        try { convoWs.close(); } catch { /* already closed */ }
+        convoWs = null;
+        conversationId = null;
+      }
+      refresh();
+      connectLive();
+    });
+  }
+
   if (!cfg.loggedIn) $("login-row").hidden = false;
 
   $("ask-btn").addEventListener("click", () => sendAsk($("ask").value));

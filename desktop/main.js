@@ -33,6 +33,14 @@ let hudWindow = null;
 let hudVisible = true;
 let stack = null;
 
+// Resolve the live backend base once the stack knows its port (a foreign
+// backend on 8000 makes the stack move to a free port). Before the stack is up,
+// fall back to the configured defaults.
+function liveBase() {
+  if (stack && stack.baseUrl) return stack.baseUrl;
+  return API_URL;
+}
+
 // ---- config: token + urls, persisted so pasting a token once sticks ---------
 
 function configPath() {
@@ -195,7 +203,7 @@ function notify(title, body) {
 
 // ---- IPC -----------------------------------------------------------------------
 
-ipcMain.handle("mira:config", () => ({ apiUrl: API_URL, token: getToken(), loggedIn: Boolean(getToken()) }));
+ipcMain.handle("mira:config", () => ({ apiUrl: liveBase(), token: getToken(), loggedIn: Boolean(getToken()) }));
 ipcMain.handle("mira:set-token", (_e, token) => {
   writeConfig({ ...readConfig(), token: (token || "").trim() });
   if (mainWindow) mainWindow.loadURL(withToken(WEB_URL));
@@ -215,7 +223,9 @@ ipcMain.handle("mira:stack-start", async () => {
 
 // JSON GET / POST / speak helpers — CORS-free routes for the file:// renderer.
 function guardUrl(url) {
-  if (!url.startsWith(API_URL)) throw new Error("refusing non-local URL");
+  if (!url.startsWith(API_URL) && !url.startsWith(liveBase())) {
+    throw new Error("refusing non-local URL");
+  }
 }
 
 function readBody(res) {
@@ -395,6 +405,15 @@ function startStack() {
   stack = new MiraStack();
   stack.onChange = (s) => {
     if (mainWindow && mainWindow.webContents) mainWindow.webContents.send("mira:stack", s);
+    // If the stack had to move off the default port (a foreign backend was
+    // squatting on 8000), point the window and HUD at where Mira actually is.
+    if (s && s.baseUrl && s.baseUrl !== WEB_URL && s.baseUrl !== API_URL) {
+      if (mainWindow && mainWindow.webContents) {
+        const current = mainWindow.webContents.getURL() || "";
+        if (!current.startsWith(s.baseUrl)) mainWindow.loadURL(withToken(s.baseUrl));
+      }
+      if (hudWindow && hudWindow.webContents) hudWindow.webContents.send("mira:api-url", s.baseUrl);
+    }
   };
   stack.start().catch((err) => console.error("stack start failed:", err));
 }

@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld("mira", {
   tts: (text) => ipcRenderer.invoke("mira:tts", text),
   transcribe: (wavBytes) => ipcRenderer.invoke("mira:transcribe", wavBytes),
   wakeCheck: (wavBytes) => ipcRenderer.invoke("mira:wakeCheck", wavBytes),
+  onApiUrl: (cb) =>
+    ipcRenderer.on("mira:api-url", (_e, url) => cb && cb(url)),
 });

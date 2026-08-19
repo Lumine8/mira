@@ -36,11 +36,29 @@ function exists(p) {
   }
 }
 
-function healthOk(url, timeoutMs = 1500) {
+function healthOk(url, timeoutMs = 3000) {
   return new Promise((resolve) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       res.resume();
       resolve(res.statusCode === 200);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+// True when the backend on `url` also serves the web UI (its root returns HTML).
+// The Docker stack serves postgres-mode API only: /health is 200 but / is the
+// JSON `{"detail":"Not Found"}` — adopting it would leave the window blank.
+function servesWebUi(url, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      const html = (res.headers["content-type"] || "").includes("text/html");
+      res.resume();
+      resolve(res.statusCode === 200 && html);
     });
     req.on("error", () => resolve(false));
     req.on("timeout", () => {
@@ -129,12 +147,19 @@ class MiraStack {
     this.restartTimer = null;
     this.logs = {};
     this.onChange = null;
+    // The port the backend actually runs on. Defaults to 8000; if a foreign
+    // backend (the Docker stack, another app) is already squatting there, we
+    // pick a free port so the installed app always owns its own stack.
+    this.port = PORT;
+    this.baseUrl = BASE_URL;
   }
 
   status() {
     return {
       mode: this.rt.mode,
       healthy: this.healthy,
+      baseUrl: this.baseUrl,
+      port: this.port,
       backend: this.procs.backend ? { pid: this.procs.backend.pid, alive: this.procs.backend.exitCode === null } : null,
       ollama: this.procs.ollama ? { pid: this.procs.ollama.pid, alive: this.procs.ollama.exitCode === null } : null,
       agent: this.procs.agent ? { pid: this.procs.agent.pid, alive: this.procs.agent.exitCode === null } : null,
@@ -224,7 +249,7 @@ class MiraStack {
     this._spawn(
       "backend",
       this.rt.backendPython,
-      ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(PORT)],
+      ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(this.port)],
       { cwd: this.rt.backendDir, env },
     );
   }
@@ -238,20 +263,51 @@ class MiraStack {
   }
 
   async start() {
-    if (await healthOk(`${BASE_URL}/health`)) {
-      this.healthy = true; // adopt an already-running backend
+    // A backend on our port already. Only adopt it if it is OURS — i.e. it also
+    // serves the web UI. A foreign backend (the Docker stack's postgres-mode API)
+    // passes /health but returns JSON at /, which would leave the window blank.
+    if (await healthOk(`${this.baseUrl}/health`)) {
+      if (await servesWebUi(this.baseUrl)) {
+        this.healthy = true; // adopt an already-running Mira backend
+        this._emit();
+        return;
+      }
+      // Foreign backend squatting on our port: move to a free one.
+      for (let port = PORT + 1; port < PORT + 100; port++) {
+        if (!(await healthOk(`http://127.0.0.1:${port}/health`, 800))) {
+          this.port = port;
+          this.baseUrl = `http://127.0.0.1:${port}`;
+          break;
+        }
+      }
       this._emit();
-      return;
     }
     await this._ensureOllama();
     this._startBackend();
-    for (let i = 0; i < 40 && !this.stopped; i++) {
-      if (await healthOk(`${BASE_URL}/health`, 1000)) {
+    // Cold starts vary: the bundled python imports sherpa + kokoro (and Windows
+    // Defender may scan the freshly extracted runtime first time). Give it a
+    // generous window, and if it still isn't up, keep retrying in the
+    // background rather than giving up and leaving the app stuck "offline".
+    for (let i = 0; i < 120 && !this.stopped; i++) {
+      if (await healthOk(`${this.baseUrl}/health`, 5000)) {
         this.healthy = true;
         this._emit();
         break;
       }
       await new Promise((r) => setTimeout(r, 500));
+    }
+    if (!this.healthy && !this.stopped) {
+      this._emit();
+      this._healthRetry = setInterval(async () => {
+        if (this.stopped) return clearInterval(this._healthRetry);
+        if (this.healthy) return clearInterval(this._healthRetry);
+        if (await healthOk(`${this.baseUrl}/health`, 5000)) {
+          this.healthy = true;
+          this._emit();
+          if (this.healthy) this._startAgent();
+          clearInterval(this._healthRetry);
+        }
+      }, 3000);
     }
     if (this.healthy) this._startAgent();
     this._emit();
@@ -260,6 +316,10 @@ class MiraStack {
   stop() {
     this.stopped = true;
     clearTimeout(this.restartTimer);
+    if (this._healthRetry) {
+      clearInterval(this._healthRetry);
+      this._healthRetry = null;
+    }
     for (const name of Object.keys(this.procs)) {
       killTree(this.procs[name] && this.procs[name].pid);
       this.procs[name] = null;
