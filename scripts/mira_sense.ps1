@@ -14,7 +14,8 @@
 # with -ApiUrl if you changed API_PORT.
 
 param(
-    [string]$ApiUrl = "http://localhost:8000"
+    [string]$ApiUrl = "http://localhost:8000",
+    [string]$Token = $env:MIRA_ACCESS_TOKEN
 )
 
 Add-Type @"
@@ -58,8 +59,11 @@ $payload = @{
     content = $content
 } | ConvertTo-Json
 
+$headers = @{}
+if ($Token) { $headers["X-Mira-Token"] = $Token }
+
 try {
-    Invoke-RestMethod -Method Post -Uri "$ApiUrl/mira/perceive" -ContentType "application/json" -Body $payload | Out-Null
+    Invoke-RestMethod -Method Post -Uri "$ApiUrl/mira/perceive" -ContentType "application/json" -Headers $headers -Body $payload | Out-Null
     Write-Output "perceived: $content"
 } catch {
     Write-Output "failed to reach Mira at $ApiUrl`: $_"

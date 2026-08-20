@@ -430,12 +430,21 @@ function sendUtterance(chunks, sampleRate) {
 }
 
 // The wake word: she only answers in always-listening mode when she's called
-// ("mira, ..."). Whisper base.en renders the name loosely (myra, meera, mira,
-// "hey mira"), so instead of an exact prefix match we strip a leading name-like
-// word plus any greeting that precedes it. Returns the text with the wake word
-// stripped (or null when the utterance clearly didn't summon her). No wake
-// word configured = every utterance heard.
-const WAKE_GREETINGS = /^(hey|hi|okay|ok|so|listen|um|uh|please)\b[\s,.:!?]*/i;
+// ("mira, ..."). Whisper base.en is a 39M-param model, so it renders the name
+// loosely (myra, meera, mira, "what mire", "merry") and often front-loads a
+// filler word ("what", "that", "hey") before it. So instead of requiring an
+// exact name at position 0, we look for a name-like word within the first few
+// words and strip everything up to and including it. Returns the text with the
+// wake word stripped (or null when the utterance clearly didn't summon her).
+// No wake word configured = every utterance heard.
+const WAKE_GREETINGS =
+  /^(hey|hi|hello|okay|ok|so|listen|um|uh|please|good\s*(morning|afternoon|evening))\b[\s,.:!?]*/i;
+
+// Whisper renderings that still mean her name (mira/myra/meera/mire/merry/
+// marie/mara/mari...). The loose m-pattern tolerates the base model's sloppy
+// vowels. Search window is the first 3 words so a stray filler can't break a
+// real summon, but random chatter far from her name still won't match.
+const WAKE_NAME = /^m[iyae]{0,2}r[aeiouyrw]{1,2}\b/i;
 
 function applyWakeWord(text) {
   const ww = (state.wake_word || "").trim().toLowerCase();
@@ -443,15 +452,19 @@ function applyWakeWord(text) {
   let lower = text.toLowerCase().trim();
   let rest = lower.replace(WAKE_GREETINGS, "");
   if (rest === lower) rest = lower; // no greeting — keep original start
-  // Whisper renderings that still mean her name. "mira" is the canonical one;
-  // these are the shapes a 39M-param base model actually produces.
-  const name = /^(m[iy]r[aeiouy]|m[eia]r[aeiouy]|m[aiey]ra|myra|meera|mira|mara)\b/;
-  const m = rest.match(name);
-  if (!m) {
+  const words = rest.split(/[\s,.;:!?]+/).filter(Boolean);
+  let hit = -1;
+  for (let i = 0; i < Math.min(words.length, 3); i++) {
+    if (WAKE_NAME.test(words[i])) {
+      hit = i;
+      break;
+    }
+  }
+  if (hit === -1) {
     setMiraLine("she's listening — call her by name", "");
     return null;
   }
-  const stripped = rest.slice(m[0].length).replace(/^[\s,.;:!?]+/, "");
+  const stripped = words.slice(hit + 1).join(" ").trim();
   return stripped || null;
 }
 
