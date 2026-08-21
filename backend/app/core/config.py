@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     mira_access_token: str = ""
 
     api_port: int = 8000
-    api_cors_origins: str = "http://localhost:5173,http://localhost:8080"
+    # Host the API binds to. 127.0.0.1 = this machine only (default, safest).
+    # 0.0.0.0 = reachable from the LAN so the Android app can talk to her.
+    api_host: str = "127.0.0.1"
+    api_cors_origins: str = "http://localhost:5173,http://localhost:8080,https://mira.mousebase.dev,https://localhost,capacitor://localhost,http://localhost"
 
     # Where browser flows (Google OAuth callback, magic-link click) redirect the
     # user after a successful sign-in. Defaults to the first CORS origin. The

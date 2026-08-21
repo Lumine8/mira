@@ -16,6 +16,8 @@ interface AuthScreenProps {
   onDismissError?: () => void;
   /** The quiet door's way in — triple-pressing the door's warm light. */
   onSecret?: () => void;
+  /** Point the app at the machine running Mira (Android). */
+  onOpenServer?: () => void;
 }
 
 const FALLBACK_OPENING =
@@ -30,6 +32,7 @@ export default function AuthScreen({
   onStartGuest,
   onDismissError,
   onSecret,
+  onOpenServer,
 }: AuthScreenProps) {
   const [token, setToken] = useState("");
   const [errorState, setErrorState] = useState<string | null>(error);
@@ -217,6 +220,11 @@ export default function AuthScreen({
               <button className="auth__back" type="button" onClick={() => setView("entry")}>
                 ← Back to the door
               </button>
+              {onOpenServer && (
+                <button className="auth__back" type="button" onClick={onOpenServer}>
+                  Where is Mira running? →
+                </button>
+              )}
             </div>
           )}
 

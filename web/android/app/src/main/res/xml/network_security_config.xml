@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mira talks to its backend over the local network (LAN IP, http://), and
+     the bundled web app is served over an https:// WebView scheme. Android
+     blocks cleartext by default, so allow it for LAN destinations — the
+     address the user points the app at may be plain http. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

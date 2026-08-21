@@ -16,6 +16,7 @@ interface Props {
   onOpenSkills: () => void;
   onOpenDocuments: () => void;
   onSignOut: () => void;
+  onOpenServer?: () => void;
 }
 
 const SEGMENTS = 5;
@@ -31,7 +32,7 @@ function Segmented({ presence }: { presence: Presence }) {
   );
 }
 
-export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms, identity, isFounder, moderationOpen, onToggleModeration, onOpenSkills, onOpenDocuments, onSignOut }: Props) {
+export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms, identity, isFounder, moderationOpen, onToggleModeration, onOpenSkills, onOpenDocuments, onSignOut, onOpenServer }: Props) {
   const presence = derivePresence(state, { thinking, connected });
   const who = identity?.name ? (identity.role === "founder" ? identity.name : identity.name) : "You";
   return (
@@ -87,6 +88,16 @@ export default function PresenceBar({ connected, thinking, state, archiveOpen, o
         >
           Papers
         </button>
+        {onOpenServer && (
+          <button
+            className="presence__archive"
+            type="button"
+            onClick={onOpenServer}
+            title="Where Mira is running"
+          >
+            Server
+          </button>
+        )}
         <span className="presence__who" title={who}>
           {who}
         </span>

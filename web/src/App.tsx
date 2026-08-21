@@ -23,6 +23,7 @@ import MotePresence from "./components/mote/MotePresence";
 import SkillsScreen from "./components/skills/SkillsScreen";
 import DocumentsScreen from "./components/documents/DocumentsScreen";
 import DocumentModal from "./components/documents/DocumentModal";
+import ServerSettings from "./components/ServerSettings";
 
 export default function App() {
   const session = useSession();
@@ -47,6 +48,7 @@ export default function App() {
   const [view, setView] = useState<"home" | "messages" | "skills" | "documents">("home");
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
+  const [serverOpen, setServerOpen] = useState(false);
   const lastInjected = useRef<string | null>(null);
   // The quiet door: three backticks anywhere, or three presses of the door's
   // warm light. No link leads here — it is not advertised, only known.
@@ -68,7 +70,7 @@ export default function App() {
     if (live.replyEvent && messages.active?.id === live.replyEvent.conversationId) {
       void messages.refreshActive();
     }
-  }, [live.replyEvent, messages]);
+  }, [live.replyEvent, messages.active?.id, messages.refreshActive]);
 
   useEffect(() => {
     // A research run finished and left a paper on her shelf — remember it so a
@@ -85,7 +87,7 @@ export default function App() {
       setArtifact(null);
       setOpenDoc(docEvent.name);
     }
-  }, [live.documentEvent, messages]);
+  }, [live.documentEvent, messages.clearCreating, messages.noteDocument]);
 
   useEffect(() => {
     // She started writing a research paper — open the window to watch it form,
@@ -94,7 +96,7 @@ export default function App() {
       messages.noteCreating(live.creatingEvent.conversationId);
       setArtifact({ kind: "creating", conversationId: live.creatingEvent.conversationId });
     }
-  }, [live.creatingEvent, messages]);
+  }, [live.creatingEvent, messages.noteCreating]);
 
   useEffect(() => {
     // She is looking at a page — the window shows what she is reading as
@@ -135,6 +137,7 @@ export default function App() {
           </div>
         </div>
         <SecretRoom open={secret.open} onClose={secret.closeRoom} />
+        <ServerSettings open={serverOpen} onClose={() => setServerOpen(false)} />
       </div>
     );
   }
@@ -149,8 +152,10 @@ export default function App() {
           onStartGuest={session.startGuest}
           onDismissError={session.clearAuthError}
           onSecret={secret.openRoom}
+          onOpenServer={() => setServerOpen(true)}
         />
         <SecretRoom open={secret.open} onClose={secret.closeRoom} />
+        <ServerSettings open={serverOpen} onClose={() => setServerOpen(false)} />
       </div>
     );
   }
@@ -211,6 +216,7 @@ export default function App() {
         onOpenSkills={() => setView("skills")}
         onOpenDocuments={() => setView("documents")}
         onSignOut={() => void session.signOut()}
+        onOpenServer={() => setServerOpen(true)}
       />
 
       <main className="stage">
@@ -280,6 +286,7 @@ export default function App() {
       <ModerationModal open={isFounder && moderationOpen} onClose={() => setModerationOpen(false)} />
 
       <SecretRoom open={secret.open} onClose={secret.closeRoom} />
+      <ServerSettings open={serverOpen} onClose={() => setServerOpen(false)} />
     </div>
   );
 }

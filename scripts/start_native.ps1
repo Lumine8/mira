@@ -65,9 +65,10 @@ if ($modelNeeded -and -not (Test-Path (Join-Path $WhisperModel "base.en-encoder.
     Write-Host "whisper model ready" -ForegroundColor Green
 }
 
-Write-Host "native backend on http://127.0.0.1:8000 (sqlite + local ollama)" -ForegroundColor Cyan
-Write-Host "  api + web:   http://127.0.0.1:8000/" -ForegroundColor DarkGray
-Write-Host "  docs:        http://127.0.0.1:8000/docs" -ForegroundColor DarkGray
+$Host = if ($env:MIRA_API_HOST) { $env:MIRA_API_HOST } else { "127.0.0.1" }
+Write-Host "native backend on http://$Host`:8000 (sqlite + local ollama)" -ForegroundColor Cyan
+Write-Host "  api + web:   http://$Host`:8000/" -ForegroundColor DarkGray
+Write-Host "  docs:        http://$Host`:8000/docs" -ForegroundColor DarkGray
 
 # ---- boot the api ------------------------------------------------------------
 
@@ -81,7 +82,7 @@ if (Test-Path $PidFile) {
 }
 
 $proc = Start-Process -FilePath $Python `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000" `
+    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", $Host, "--port", "8000" `
     -WorkingDirectory $Backend -WindowStyle Hidden -PassThru
 $proc.Id | Set-Content $PidFile
 Write-Host "api starting (pid $($proc.Id))..." -ForegroundColor DarkGray

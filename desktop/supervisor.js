@@ -255,10 +255,11 @@ if (this.rt.mode === "portable") {
     } catch {
       /* best effort */
     }
+    const host = process.env.MIRA_API_HOST || env.API_HOST || "127.0.0.1";
     this._spawn(
       "backend",
       this.rt.backendPython,
-      ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(this.port)],
+      ["-m", "uvicorn", "app.main:app", "--host", host, "--port", String(this.port)],
       { cwd: this.rt.backendDir, env },
     );
   }

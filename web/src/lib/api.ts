@@ -28,8 +28,11 @@ import type {
 } from "./types";
 import { getAccessToken } from "./token";
 import { guestId } from "./guest";
+import { apiOrigin } from "./server";
 
-const BASE = "/api";
+/** API root. Same-origin when Mira serves the bundle (desktop/browser);
+ *  absolute when the Android app points at her address. */
+const BASE = `${apiOrigin()}/api`;
 
 function authHeaders(): Record<string, string> {
   const token = getAccessToken();
@@ -589,6 +592,10 @@ export function liveWsUrl(): string {
 }
 
 function wsBase(): string {
+  const origin = apiOrigin();
+  if (origin) {
+    return origin.replace(/^http/, "ws");
+  }
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}`;
 }
