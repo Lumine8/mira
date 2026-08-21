@@ -14,6 +14,7 @@ let state = {};
 let liveWs = null;
 let convoWs = null;
 let conversationId = null;
+let inReply = false; // true while she's mid-reply — presence poll must not clobber it
 
 const whoMap = {
   thinking: "thinking",
@@ -77,6 +78,9 @@ function renderPresence(s) {
   const tone = whoMap[s.present_energy_level === "high" ? "speaking" : s.thinking || "resting"];
   const who = mood === "quiet" ? "at the door" : `${mood} right now`;
   $("who").textContent = who;
+  // Never overwrite an active reply's status: she may be thinking for a while,
+  // and the 10s presence poll would otherwise wipe "thinking…" a second in.
+  if (inReply) return;
   setMiraLine(s.pending_message || `she feels ${mood}`, tone === "speaking" ? "is-speaking" : "");
 }
 
@@ -145,6 +149,7 @@ async function connectConvo() {
     convoWs.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === "message" && msg.speaker === "mira") {
+        inReply = false;
         setMiraLine("she answered", "is-speaking");
         addAlert("Mira", msg.content);
         if (!streamed) {
@@ -159,12 +164,14 @@ async function connectConvo() {
           if (tail.trim()) speakChunk(tail);
         }
       } else if (msg.type === "stream_token") {
+        inReply = true;
         setMiraLine("thinking…", "is-speaking");
         streamed += msg.content || "";
         flushCompleteSentences();
       } else if (msg.type === "pending_change") {
         addAlert("approval needed", msg.change.summary || msg.change.kind);
       } else if (msg.type === "error") {
+        inReply = false;
         addAlert("error", msg.message);
       }
     };
@@ -180,6 +187,7 @@ async function sendAsk(text) {
   $("ask").value = "";
   if (!convoWs || convoWs.readyState !== WebSocket.OPEN) await connectConvo();
   if (!convoWs || convoWs.readyState !== WebSocket.OPEN) return;
+  inReply = true;
   setMiraLine("she's thinking…", "is-speaking");
   convoWs.send(JSON.stringify({ type: "text", content: text }));
 }
@@ -239,6 +247,7 @@ async function speakAnnouncement(text) {
 // Speak one reply at a time so overlapping messages don't stomp each other.
 let audioQueue = [];
 let audioBusy = false;
+let speakingNowTimer = null;
 
 function queueAudio(audio) {
   audioQueue.push(audio);
@@ -254,6 +263,15 @@ function dequeueAudio() {
   audioBusy = true;
   speakingNow = true;
   const next = audioQueue.shift();
+  // Safety net: if an audio element never fires 'ended' (system hiccup), don't
+  // let speakingNow stay true forever — that would silently deafen Mira.
+  if (speakingNowTimer) clearTimeout(speakingNowTimer);
+  speakingNowTimer = setTimeout(() => {
+    if (audioBusy) {
+      audioBusy = false;
+      speakingNow = false;
+    }
+  }, 20000);
   next.play().catch(() => {
     dequeueAudio();
   });
@@ -272,7 +290,7 @@ let listenOn = false;
 let speakingNow = false; // set while her TTS audio is playing (avoid hearing herself)
 
 const VAD_PRE_MS = 250; // keep 250ms before speech onset so no first word is lost
-const VAD_END_MS = 550; // this much silence ends an utterance (snappier than 900ms)
+const VAD_END_MS = 900; // this much silence ends an utterance (900ms tolerates natural pauses)
 const VAD_MAX_MS = 12000; // hard cap on a single utterance
 const VAD_MIN_MS = 300; // ignore sub-second noise blips
 const VAD_THRESHOLD = 0.02; // RMS floor for speech (lower catches quieter voices)
@@ -306,7 +324,13 @@ async function toggleListen() {
     handleFrame(samples, frameMs, sampleRate);
   };
   analyser.connect(micProc);
-  micProc.connect(audioCtx.destination);
+  // Route the script processor through a zero-gain node so the graph stays
+  // live (onaudioprocess keeps firing) without feeding the mic into the
+  // speakers — which would echo back into the VAD and deafen Mira.
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  micProc.connect(mute);
+  mute.connect(audioCtx.destination);
   listenOn = true;
   vad.state = "idle";
   vad.pre = [];
