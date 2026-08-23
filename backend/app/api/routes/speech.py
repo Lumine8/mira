@@ -3,9 +3,6 @@ from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
 from app.services.identity import get_current_user_id
-from app.services.speech.kws import check_wake_word
-from app.services.speech.service import synthesize
-from app.services.speech.stt import transcribe
 
 router = APIRouter(prefix="/speech", tags=["speech"])
 
@@ -29,6 +26,10 @@ def tts_audio(payload: TtsRequest, _user_id: int = Depends(get_current_user_id))
     if not text:
         raise HTTPException(status_code=400, detail="nothing to speak")
     try:
+        from app.services.speech.service import synthesize
+    except ImportError:
+        raise HTTPException(status_code=503, detail="speech engine not available on this device")
+    try:
         audio = synthesize(text)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -49,6 +50,10 @@ async def transcribe_audio(
     wav = await file.read()
     if not wav:
         raise HTTPException(status_code=400, detail="empty audio")
+    try:
+        from app.services.speech.stt import transcribe
+    except ImportError:
+        raise HTTPException(status_code=503, detail="speech-to-text not available on this device")
     try:
         text = transcribe(wav)
     except ValueError as exc:
@@ -75,7 +80,10 @@ async def wake_word_audio(
     if not wav:
         raise HTTPException(status_code=400, detail="empty audio")
     try:
+        from app.services.speech.kws import check_wake_word
         heard = check_wake_word(wav)
+    except ImportError:
+        heard = True
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"heard": heard}

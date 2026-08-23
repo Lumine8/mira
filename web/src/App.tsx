@@ -24,8 +24,10 @@ import SkillsScreen from "./components/skills/SkillsScreen";
 import DocumentsScreen from "./components/documents/DocumentsScreen";
 import DocumentModal from "./components/documents/DocumentModal";
 import ServerSettings from "./components/ServerSettings";
+import { useBackendBoot } from "./features/bootstrap/useBackendBoot";
 
 export default function App() {
+  const boot = useBackendBoot();
   const session = useSession();
   // The account keyed by signed-in user (or guest), so switching accounts
   // reloads all account-scoped state instead of showing the previous one's.
@@ -127,6 +129,41 @@ export default function App() {
       ? "typing"
       : "idle";
   useFavicon(faviconMode);
+
+  if (boot.state === "starting") {
+    return (
+      <div className="app">
+        <div className="auth">
+          <div className="auth__card">
+            <div className="auth__loading" aria-label="loading" />
+            <p className="auth__subtitle" style={{ marginTop: 12 }}>
+              Starting Mira...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (boot.state === "error") {
+    return (
+      <div className="app">
+        <div className="auth">
+          <div className="auth__card">
+            <h1 className="auth__title">Failed to start</h1>
+            <p className="auth__subtitle">{boot.error}</p>
+            <button
+              className="auth__button"
+              onClick={() => window.location.reload()}
+              style={{ marginTop: 12 }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (session.mode === "loading") {
     return (

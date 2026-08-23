@@ -12,18 +12,21 @@ export function isNative(): boolean {
   return Boolean(window.Capacitor?.isNativePlatform?.());
 }
 
-/** The address the web app talks to. In the desktop/browser case Mira serves
- *  the bundle itself, so relative paths resolve to her. In the Android app the
- *  bundle is local and Mira lives somewhere reachable — the user points the
- *  app at her once, like the single-click portable installer. */
+/** The address the web app talks to. On native, the backend runs locally
+ *  on the device (no PC needed). In the desktop/browser case Mira serves
+ *  the bundle itself, so relative paths resolve to her. */
 export function getServerBase(): string {
+  if (isNative()) {
+    // Backend runs locally inside the APK on port 8000
+    return "http://127.0.0.1:8000";
+  }
   const stored = localStorage.getItem(SERVER_KEY);
   if (stored) return stored.replace(/\/+$/, "");
   return "";
 }
 
 export function getServerConfigured(): boolean {
-  return Boolean(getServerBase());
+  return isNative() || Boolean(getServerBase());
 }
 
 export function setServerBase(url: string): void {

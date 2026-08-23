@@ -9,7 +9,6 @@ from app.schemas import CallStartRequest, CallStartResponse, SpeakRequest
 from app.services.ai.base import AIProvider
 from app.services.conversation import ConversationManager
 from app.services.identity import get_current_user_id
-from app.services.speech.service import synthesize
 
 router = APIRouter(prefix="/call", tags=["calls"])
 
@@ -75,7 +74,10 @@ def speak_call(
         raise HTTPException(status_code=400, detail="nothing to speak")
 
     try:
+        from app.services.speech.service import synthesize
         audio = synthesize(payload.text)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="speech engine not available on this device")
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return Response(content=audio, media_type="audio/wav")
