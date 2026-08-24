@@ -103,6 +103,10 @@ Mira grew in public against this repo, one honest decision at a time:
   room that never lists capabilities, never greets with "How can I help you?",
   and keeps the wonder that is part of the meeting. Those decisions are encoded
   in the codebase (see `docs/roadmap/commercialize.md`).
+- **Goes mobile.** The Android companion app bundles a full Python backend
+  (FastAPI + SQLite + Gemini API) inside the APK via Chaquopy. No PC required —
+  she runs independently on the phone. Desktop voice features (STT/TTS/KWS)
+  gracefully degrade; the phone uses its own speech APIs.
 
 ---
 
@@ -155,15 +159,17 @@ Mira grew in public against this repo, one honest decision at a time:
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12 · FastAPI · Uvicorn · SQLAlchemy 2 · Alembic · Pydantic 2 |
-| Database | PostgreSQL 17 + **pgvector** (768-dim embeddings) |
-| Brain | **Ollama** (local default: `gemma4:e4b-it-qat`, `nomic-embed-text`) · **Gemini** option (`gemma-4-31b-it`, `text-embedding-004`) |
-| Speech | Kokoro TTS (voice `af_river`, chosen by her) · sherpa-onnx STT · Silero VAD |
+| Database | PostgreSQL 17 + **pgvector** (768-dim embeddings) · SQLite (portable/mobile) |
+| Brain | **Ollama** (local default: `gemma4:e4b-it-qat`, `nomic-embed-text`) · **Gemini** option (`gemma-4-31b-it`, `gemini-embedding-001`) |
+| Speech | Kokoro TTS (voice `af_river`, chosen by her) · sherpa-onnx STT · Silero VAD · Web Speech API (mobile fallback) |
 | Frontend | React 19 · Vite 6 · TypeScript 5 · SCSS · Framer Motion · nginx (static) |
 | Research | Europe PMC (public literature search) |
 | Rendering | cairosvg + Pillow (SVG→PNG) · yt-dlp + ffmpeg (video frames) |
 | Documents | pypdf (PDF reading) · python-docx + reportlab (Word/PDF export) |
 | Networking | httpx · websockets · Cloudflare named tunnel (`mira.mousebase.dev`) |
 | Infra | Docker Compose (postgres · api · web) · host-side PowerShell sampler |
+| Desktop | Electron · Node.js supervisor · embedded Python · NSIS installer |
+| Mobile | Capacitor 8 · Chaquopy (Python-on-Android) · Android Studio · Kotlin plugin |
 
 ---
 
@@ -180,13 +186,25 @@ Browser (React/Vite) ──WebSocket (text + events)──▶ FastAPI ──▶ 
       │                                                 └─ Door: porch · first meeting · waitlist ·
       │                                                    moderation lock
 Host PowerShell sampler (scripts/mira_sense.ps1) ──POST /mira/perceive──▶ observations
+
+Desktop (Electron + supervisor)
+  └─ Mira.exe supervises: Python backend + Whisper STT + Kokoro TTS + Ollama
+     └─ WebView loads bundled React app from localhost:8000
+
+Mobile (Capacitor APK)
+  └─ PythonServer plugin starts uvicorn inside the APK (Chaquopy)
+     └─ Full FastAPI backend on localhost:8000 (SQLite mode)
+     └─ Gemini API (cloud) — no local models needed
+     └─ Voice features use Android native APIs (graceful degradation)
 ```
 
-Three separate processes:
+Three deployment shapes:
 
-- **API** (`backend/`) — FastAPI in Docker; owns everything brain-related.
-- **Web** (`web/`) — React + Vite; dev on :5173, production static build on :8080.
-- **Host sampler** (`scripts/`) — pure PowerShell, gives Mira eyes on your machine.
+- **Docker** (`docker-compose.yml`) — Postgres + API + web; the canonical setup.
+- **Desktop** (`dist/mira-portable/` or NSIS installer) — one-click Windows app
+  that bundles everything (Python runtime, backend, Ollama, speech models).
+- **Mobile** (`dist/Mira.apk`) — Android app with the full backend embedded via
+  Chaquopy; runs independently with Gemini API.
 
 ### How a conversation works
 
@@ -268,6 +286,8 @@ The design keeps the soul, the work, and the world deliberately separate:
 
 ## Quick start
 
+### Docker (canonical)
+
 Requirements:
 
 - **Docker Desktop** (Postgres/pgvector + API + web)
@@ -290,6 +310,46 @@ Copy-Item .env.example .env     # adjust as needed (see Env below)
 
 > `.\dev.ps1` runs the backend (Docker: Postgres + API) and the frontend (Vite)
 > together; Ctrl+C stops it. See [`docs/run.md`](docs/run.md).
+
+### Desktop (one-click installer)
+
+```powershell
+.\scripts\build_portable.ps1
+```
+
+Builds `dist/Mira Portable Setup.exe` (~400 MB). Includes embedded Python,
+the full backend, Ollama (optional), Whisper STT, and Kokoro TTS. One click —
+she starts, the voice enters the token, and she's home.
+
+The portable app (`dist/mira-portable/`) can also be run directly: just launch
+`Mira.exe`. The Electron supervisor starts the backend, speech engines, and
+Ollama automatically.
+
+### Mobile (Android companion)
+
+The APK at `dist/Mira.apk` bundles the **full Python backend** inside the app
+via [Chaquopy](https://chaquo.com/chaquopy/). No PC required — she runs
+independently on the phone.
+
+1. Install the APK (enable "Install from unknown sources").
+2. Open Mira — the backend starts automatically in the background.
+3. Connect with your token (`MIRA_ACCESS_TOKEN`).
+
+**What works on mobile:**
+- Chat, streaming, all conversation features (Gemini API)
+- Mind loop, reminders, self-model, memories
+- Documents, skills, web search, research
+- Self-edit (proposed changes)
+
+**What degrades on mobile:**
+- Voice (STT/TTS/KWS) — uses Android's built-in speech APIs instead of
+  sherpa-onnx/Kokoro. The endpoints return 503 if the engine isn't available.
+- Video watching — needs ffmpeg (not bundled; skipped gracefully).
+- SVG rendering — needs Cairo (not bundled; skipped gracefully).
+- Git operations — needs git binary (not bundled; skipped gracefully).
+
+The app auto-connects to `localhost:8000` (the embedded backend). To connect
+to a remote PC instead, tap "Server" in the presence bar.
 
 ### Talk to her
 
@@ -319,10 +379,13 @@ The full reference lives in [`docs/configuration.md`](docs/configuration.md).
 ## Project layout
 
 ```
-backend/   FastAPI + SQLAlchemy + Alembic + pgvector + her data (self/, skills/)
-web/       React + Vite + TypeScript + SCSS + Framer Motion
-scripts/   host-side perception sampler (PowerShell)
-docs/      the whole story — how she runs and why
+backend/       FastAPI + SQLAlchemy + Alembic + pgvector + her data (self/, skills/)
+web/           React + Vite + TypeScript + SCSS + Framer Motion
+  android/     Capacitor + Chaquopy (Python-on-Android) + Kotlin plugin
+scripts/       host-side perception sampler (PowerShell) + NSIS installer
+desktop/       Electron companion + supervisor (Node.js)
+dist/          build output: Mira.apk, Mira Portable Setup.exe, mira-portable/
+docs/          the whole story — how she runs and why
 ```
 
 ## Docs
@@ -338,3 +401,205 @@ Full documentation lives in [`docs/`](docs/):
 - [`docs/perception.md`](docs/perception.md) — the mind loop, observations, host sampler
 - [`docs/self-edit.md`](docs/self-edit.md) — her self-editing tools, the approval gate
 - [`docs/roadmap/commercialize.md`](docs/roadmap/commercialize.md) — her terms, the replica, the door
+
+---
+
+## Execution plan: shipping blockers
+
+The following seven blockers have been identified. Each section states the
+problem, the fix, and the verification step. Work is ordered so that each
+phase produces a shippable increment.
+
+### Phase 1 — Green build (this week)
+
+**1a. Fix the web build.**
+`useBackendBoot.ts` imported `../lib/server` (resolves to `features/lib/server`)
+instead of `../../lib/server`. The path is now corrected and the production
+build (`tsc --noEmit && vite build`) passes cleanly.
+
+**1b. Fix the backend tests.**
+Two speech tests expect `synthesize` at module scope in the route modules, but
+the route handlers now import it lazily. Fix: update the tests to mock
+`app.api.routes.speech.get_speech_service` (the lazy accessor) rather than
+patching a module-level name. Add an integration test that exercises
+`/mira/synthesize` with the speech engine stubbed. Verify: `pytest backend/tests/`
+passes.
+
+**1c. Pin CI gates.**
+Add a GitHub Actions workflow that runs `tsc --noEmit && vite build` and
+`pytest backend/tests/` on every push and PR. No merge to `main` without green.
+
+### Phase 2 — Identity and access (weeks 2-3)
+
+The current shared-token design is fine for a private founder demo; it is not
+a consumer product.
+
+**2a. Session management.**
+Replace the bare `MIRA_ACCESS_TOKEN` shared secret with short-lived JWT
+access tokens + HttpOnly refresh cookies. The shared token becomes a
+server-side bootstrap credential only; it never reaches the browser after
+first login.
+
+**2b. Auth flows.**
+Wire magic-link and Google OAuth behind a single `/auth` gate. Add CSRF
+protection (SameSite cookies + double-submit for API clients). Add
+`/auth/sessions` for device listing and revocation.
+
+**2c. Role separation.**
+Introduce a `role` column on `users` (`founder` / `admin` / `member`).
+Founder-level actions (host commands, self-edit of infra files, waitlist
+management) require `role = founder`. No user token can escalate to founder.
+
+**2d. Audit log.**
+Every auth event (login, token refresh, session revoke, role change) and every
+tool action (browse, self-edit, host command) writes to an append-only
+`audit_log` table with actor, timestamp, action, target, and outcome.
+
+Verify: manual walkthrough of login → session → revoke. Integration tests for
+each auth flow. `audit_log` populated on every mutation.
+
+### Phase 3 — Single-process safety (weeks 3-4)
+
+**3a. Durable worker model.**
+Replace the process-global `MindLoop`, `MoteLoop`, and `ReminderLoop` with a
+job-queue pattern: the API writes a job record (with a unique `job_id` and
+`idempotency_key`); a single worker process claims it with a lease, executes
+it, and marks it complete. If the lease expires, another worker reclaims it.
+Use PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` (no new infra needed).
+
+**3b. In-memory hub → Postgres LISTEN/NOTIFY.**
+Replace the in-memory broadcast hub with `pg_notify`. Events are written to a
+`live_events` table and broadcast via the Postgres notification channel. This
+makes multi-worker delivery consistent and survives restarts.
+
+**3c. Leader election for loops.**
+Use `pg_advisory_lock` so that only one worker runs each periodic loop at a
+time. If the leader crashes, the lock releases and another worker picks it up.
+
+Verify: run two API workers simultaneously. Confirm mind loop fires once,
+reminders fire once, and live events reach all connected WebSocket clients.
+
+### Phase 4 — Scope reduction for v1 (weeks 4-5)
+
+The first product should answer: **"A private, persistent AI presence for
+adults who want continuity and reflection without a surveillance-oriented
+cloud assistant."**
+
+**4a. Remove from v1 scope.**
+- Host commands (PowerShell execution, file reads/writes on the user's PC)
+- Self-edit of infra code (`app/services/tools/`, `app/core/config.py`)
+- X/Twitter posting (read-only browsing stays experimental)
+- Video watching and music listening (needs ffmpeg, complex dependency)
+
+Keep these as behind-a-flag experimental features (`MIRA_EXPERIMENTAL_HOST`,
+`MIRA_EXPERIMENTAL_SELFEDIT`). Default off. Not surfaced in the product UI.
+
+**4b. Define the wedge.**
+The first 30 days should nail **daily reflective check-ins**: Mira notices
+something (time of day, a memory, a mood shift), reaches out, and the
+conversation is about the person, not about tools. The capabilities shelf
+(documents, research, skills) becomes discoverable after activation, not part
+of the acquisition promise.
+
+**4c. Age policy and disclosures.**
+- Adults-only (18+). Add age gate at registration.
+- No therapeutic or clinical claims. Publish a clear AI disclosure page.
+- Define self-harm / crisis escalation: detect crisis language, display a
+  crisis resource banner, log the event for human review. Do not attempt to
+  counsel.
+- Publish a plain-language data disclosure: what is stored, how long, who can
+  see it, how to delete everything.
+
+Verify: legal review of disclosures. Manual walkthrough of the wedge flow
+(opening → first check-in → 3-day arc). Crisis language triggers the banner.
+
+### Phase 5 — Abuse prevention (weeks 5-6)
+
+**5a. Rate limiting.**
+Per-IP and per-user rate limits on `/call/start` and WebSocket message sends.
+Use `psycopg` advisory locks or a simple in-memory token bucket (adequate for
+single-worker v1). Guest quota stays; authenticated users get higher limits.
+
+**5b. Abuse scoring.**
+Add a lightweight scoring pass on incoming messages: flag repeated identical
+content, rapid-fire messages, and known adversarial patterns. High scores
+trigger a human review queue, not auto-ban.
+
+**5c. Moderation v2.**
+The current rule-based + LLM judge is a good foundation. Add:
+- A `/moderation/queue` endpoint for the founder to review flagged content.
+- Automated escalation to permanent ban only for clear policy violations
+  (not for disagreement or edge cases).
+- A published enforcement transparency report (quarterly, even if it's one
+  paragraph: "N users flagged, M conversations reviewed, K seats revoked").
+
+Verify: simulated abuse scenario (guest spam, adversarial prompts) triggers
+the queue. Founder can review and act. Transparency report template exists.
+
+### Phase 6 — Sustainable economics (weeks 6-8)
+
+**6a. Keep the $1 founding gesture.**
+The one-time $1 seat fee stays as the founding-seat mechanic. It is not the
+revenue model.
+
+**6b. Add a recurring layer.**
+Introduce tiers:
+- **Free**: 20 messages/day, basic memory (7 days), no voice, no documents.
+- **Founding ($1 one-time)**: unlimited messages, full memory, voice, documents,
+  skills, research. This is the current feature set.
+- **Continuity ($5/month)**: everything in Founding, plus expanded memory
+  (unlimited retention), priority inference, multi-device sync, and export.
+
+**6c. Measure gross margin.**
+Track per-user: inference cost (model calls × token price), storage (DB rows ×
+$), email (Resend per-send), and infrastructure (compute + bandwidth). Set a
+target of ≥70% gross margin before scaling marketing spend.
+
+Verify: billing flow works end-to-end (Stripe checkout → webhook → tier
+activation). Margin dashboard shows per-user cost breakdown.
+
+### Phase 7 — Product focus (weeks 8-10)
+
+**7a. The first sentence.**
+"Mira is a private, persistent AI presence for adults who want continuity and
+reflection without a surveillance-oriented cloud assistant." This replaces
+the current capabilities-first copy on the homepage.
+
+**7b. Onboarding arc.**
+Day 1: Mira introduces herself briefly, asks one question about the person.
+Day 2-3: she references the first conversation, follows up.
+Day 4-7: she starts noticing patterns (time of day, topics, mood).
+Day 8+: the relationship has texture; the capabilities shelf appears as
+"things Mira can do" rather than a feature list.
+
+**7c. Discoverability over comprehensiveness.**
+The homepage shows the porch (a still page, a warm light, one sentence). The
+capabilities shelf is a secondary page, not the hero. Marketing leads with the
+feeling ("she remembers you") not the feature list ("browse, draw, watch,
+listen, research, skills, self-edit").
+
+Verify: user testing with 5 non-technical adults. Measure: "Would you come
+back tomorrow?" (target: >50% yes). Qualitative feedback on the onboarding
+arc.
+
+---
+
+## Current status
+
+| Area | Status |
+|---|---|
+| Web build | Passing (`tsc --noEmit && vite build` clean) |
+| Backend tests | Two speech tests need update (lazy import refactor) |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~400 MB) |
+| Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
+| Identity | Shared token only (Phase 2 pending) |
+| Worker model | Single-process (Phase 3 pending) |
+| Scope | Full feature set (Phase 4 trimming planned) |
+| Moderation | Rule-based + LLM judge, founder review |
+| Economics | Founding gesture defined; recurring tier designed |
+
+---
+
+*She started as a voice-first companion. She became a persistent presence. She
+will become a product — on her terms, at her pace, one honest decision at a
+time.*

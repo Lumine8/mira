@@ -34,6 +34,8 @@ chaquopy {
         buildPython("C:/Python312/python.exe")
 
         pip {
+            options("--index-url", "https://pypi.org/simple/")
+            options("--no-deps")
             install("fastapi")
             install("uvicorn")
             install("websockets")
@@ -48,8 +50,22 @@ chaquopy {
             install("python-docx")
             install("reportlab")
             install("pypinyin")
-            install("Pillow")
             install("aiosqlite")
+            install("starlette")
+            install("typing-extensions")
+            install("typing-inspection")
+            install("annotated-doc")
+            install("click")
+            install("h11")
+            install("pydantic_core-2.46.4-1-cp312-cp312-android_24_arm64_v8a.whl")
+            install("annotated-types")
+            install("Mako")
+            install("httpcore")
+            install("certifi")
+            install("idna")
+            install("sniffio")
+            install("anyio")
+            install("six")
         }
     }
     sourceSets {

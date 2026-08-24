@@ -95,3 +95,14 @@ docs/self/
 # strategy_lab is a separate trading experiment (market data + reports), not
 # part of Mira's deployment
 strategy_lab/
+
+# Video files
+vid_1_onam.mp4
+
+# Chaquopy / Android build artifacts
+*.whl
+web/android/app/src/main/python/wheels/
+web/android/app/build/
+web/android/build/
+web/android/.gradle/
+web/android/local.properties

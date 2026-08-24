@@ -9,7 +9,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import com.chaquo.python.Python;
-import com.chaquo.python.AndroidPlatform;
+import com.chaquo.python.android.AndroidPlatform;
 
 @CapacitorPlugin(name = "PythonServer")
 public class PythonServerPlugin extends Plugin {

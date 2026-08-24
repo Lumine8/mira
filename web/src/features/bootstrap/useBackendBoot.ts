@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isNative } from "../lib/server";
+import { isNative } from "../../lib/server";
 
 type BootState = "idle" | "starting" | "ready" | "error";
 
