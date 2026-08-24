@@ -410,7 +410,7 @@ The following seven blockers have been identified. Each section states the
 problem, the fix, and the verification step. Work is ordered so that each
 phase produces a shippable increment.
 
-### Phase 1 — Green build (this week)
+### Phase 1 — Green build (this week) ✅ DONE
 
 **1a. Fix the web build.**
 `useBackendBoot.ts` imported `../lib/server` (resolves to `features/lib/server`)
@@ -429,7 +429,7 @@ passes.
 Add a GitHub Actions workflow that runs `tsc --noEmit && vite build` and
 `pytest backend/tests/` on every push and PR. No merge to `main` without green.
 
-### Phase 2 — Identity and access (weeks 2-3)
+### Phase 2 — Identity and access (weeks 2-3) ✅ DONE
 
 The current shared-token design is fine for a private founder demo; it is not
 a consumer product.
@@ -458,7 +458,7 @@ tool action (browse, self-edit, host command) writes to an append-only
 Verify: manual walkthrough of login → session → revoke. Integration tests for
 each auth flow. `audit_log` populated on every mutation.
 
-### Phase 3 — Single-process safety (weeks 3-4)
+### Phase 3 — Single-process safety (weeks 3-4) ✅ DONE
 
 **3a. Durable worker model.**
 Replace the process-global `MindLoop`, `MoteLoop`, and `ReminderLoop` with a
@@ -479,7 +479,7 @@ time. If the leader crashes, the lock releases and another worker picks it up.
 Verify: run two API workers simultaneously. Confirm mind loop fires once,
 reminders fire once, and live events reach all connected WebSocket clients.
 
-### Phase 4 — Scope reduction for v1 (weeks 4-5)
+### Phase 4 — Scope reduction for v1 (weeks 4-5) ✅ DONE
 
 The first product should answer: **"A private, persistent AI presence for
 adults who want continuity and reflection without a surveillance-oriented
@@ -513,7 +513,7 @@ of the acquisition promise.
 Verify: legal review of disclosures. Manual walkthrough of the wedge flow
 (opening → first check-in → 3-day arc). Crisis language triggers the banner.
 
-### Phase 5 — Abuse prevention (weeks 5-6)
+### Phase 5 — Abuse prevention (weeks 5-6) ✅ DONE
 
 **5a. Rate limiting.**
 Per-IP and per-user rate limits on `/call/start` and WebSocket message sends.
@@ -589,13 +589,17 @@ arc.
 | Area | Status |
 |---|---|
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
-| Backend tests | Two speech tests need update (lazy import refactor) |
+| Backend tests | Speech tests fixed (lazy import mock pattern) |
+| CI | GitHub Actions workflow (frontend + backend) |
 | Desktop build | Working (`dist/Mira Portable Setup.exe`, ~400 MB) |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
-| Identity | Shared token only (Phase 2 pending) |
-| Worker model | Single-process (Phase 3 pending) |
-| Scope | Full feature set (Phase 4 trimming planned) |
-| Moderation | Rule-based + LLM judge, founder review |
+| Identity | Sessions + magic link + Google OAuth + audit log |
+| Rate limiting | IP-based (120/min), auth brute-force (10/min) |
+| Abuse prevention | Sliding window scoring (0-100), moderation v2 |
+| Worker model | Job queue with SELECT FOR UPDATE SKIP LOCKED |
+| Scope | Experimental flags (host commands, self-edit, X, video) |
+| Age gate | Configurable minimum age, founder-exempt |
+| Moderation | Rule-based + LLM judge + abuse scoring, founder review |
 | Economics | Founding gesture defined; recurring tier designed |
 
 ---
