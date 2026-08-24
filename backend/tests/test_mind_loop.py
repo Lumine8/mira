@@ -29,7 +29,7 @@ def test_observations_note_user_silence() -> None:
     now = datetime(2026, 8, 2, 14, 30, tzinfo=timezone.utc)
     last = now - timedelta(hours=3)
     text = build_observations(now, [], last, None)
-    assert "silent for about 3.0 hours" in text
+    assert "away for about 3.0 hours" in text
 
 
 def test_observations_include_perceived_events() -> None:
