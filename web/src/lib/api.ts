@@ -420,6 +420,34 @@ export function verifyMagicLink(email: string, code: string): Promise<AuthSucces
   });
 }
 
+export function signInPassword(email: string, password: string): Promise<AuthSuccess> {
+  return request<AuthSuccess>("/auth/sign-in/password", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function signUp(email: string, name: string, password: string): Promise<AuthSuccess> {
+  return request<AuthSuccess>("/auth/sign-up", {
+    method: "POST",
+    body: JSON.stringify({ email, name, password }),
+  });
+}
+
+export function setPassword(password: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/set-password", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export async function googleAuthorizeUrl(): Promise<string> {
   const res = await request<{ url: string }>("/auth/google/authorize");
   return res.url;

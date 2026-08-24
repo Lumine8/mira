@@ -57,7 +57,7 @@ export default function WaitlistModal({ open, onClose, onSignedIn }: WaitlistMod
     setBusy(true);
     try {
       const resp = await waitlistJoin(email.trim(), code.trim());
-      onSignedIn(resp.token);
+      onSignedIn(resp.access_token);
       close();
     } catch {
       setError("That code didn't work. Check it and try again.");

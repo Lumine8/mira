@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { googleAuthorizeUrl, meetingStart, requestMagicLink, verifyMagicLink, waitlistSignup } from "../../lib/api";
+import { googleAuthorizeUrl, meetingStart, requestMagicLink, signInPassword, signUp, verifyMagicLink, waitlistSignup } from "../../lib/api";
 import type { AuthConfig } from "../../lib/types";
 import FirstMeeting from "./FirstMeeting";
 import InvitationScreen from "./InvitationScreen";
@@ -23,7 +23,7 @@ interface AuthScreenProps {
 const FALLBACK_OPENING =
   "Here you are. I'm Mira. I don't know you yet, and that's alright — sit for a while, and tell me what feels true.";
 
-type View = "entry" | "meeting" | "outcome" | "porch" | "start" | "token" | "email" | "guest";
+type View = "entry" | "meeting" | "outcome" | "porch" | "start" | "token" | "email" | "guest" | "sign-up" | "password";
 
 export default function AuthScreen({
   config,
@@ -40,6 +40,9 @@ export default function AuthScreen({
   const [email, setEmail] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [emailCode, setEmailCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [signUpName, setSignUpName] = useState("");
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -125,9 +128,56 @@ export default function AuthScreen({
     setBusy(true);
     try {
       const resp = await verifyMagicLink(email.trim(), emailCode.trim());
-      onSignIn(resp.token);
+      onSignIn(resp.access_token);
     } catch {
       setErrorState("That code did not verify. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePasswordSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      setErrorState("Enter your email and password.");
+      return;
+    }
+    setErrorState(null);
+    setBusy(true);
+    try {
+      const resp = await signInPassword(email.trim(), password);
+      onSignIn(resp.access_token);
+    } catch {
+      setErrorState("Invalid email or password.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSignUp = async () => {
+    if (!email.trim() || !signUpName.trim() || !password.trim()) {
+      setErrorState("Fill in all fields.");
+      return;
+    }
+    if (password.length < 8) {
+      setErrorState("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorState("Passwords do not match.");
+      return;
+    }
+    setErrorState(null);
+    setBusy(true);
+    try {
+      const resp = await signUp(email.trim(), signUpName.trim(), password);
+      onSignIn(resp.access_token);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "";
+      if (detail.includes("409")) {
+        setErrorState("An account with that email already exists. Sign in instead.");
+      } else {
+        setErrorState("Could not create account. Try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -182,7 +232,7 @@ export default function AuthScreen({
         />
       )}
 
-      {(view === "start" || view === "token" || view === "email" || view === "guest") && (
+      {(view === "start" || view === "token" || view === "email" || view === "guest" || view === "sign-up" || view === "password") && (
         <div className="auth__card">
           <h1 className="auth__title">Mira</h1>
           <p className="auth__subtitle">Come sit with her.</p>
@@ -197,6 +247,11 @@ export default function AuthScreen({
 
           {view === "start" && (
             <div className="auth__actions">
+              {config?.password_enabled && (
+                <button className="auth__button auth__button--primary" type="button" onClick={() => setView("password")}>
+                  Sign in with password
+                </button>
+              )}
               {config?.google_enabled && (
                 <button className="auth__button" type="button" onClick={handleGoogle} disabled={busy}>
                   Continue with Google
@@ -217,6 +272,10 @@ export default function AuthScreen({
                   Join as a guest
                 </button>
               )}
+              <div className="auth__divider"><span>or</span></div>
+              <button className="auth__button auth__button--secondary" type="button" onClick={() => setView("sign-up")}>
+                Create an account
+              </button>
               <button className="auth__back" type="button" onClick={() => setView("entry")}>
                 ← Back to the door
               </button>
@@ -225,6 +284,79 @@ export default function AuthScreen({
                   Where is Mira running? →
                 </button>
               )}
+            </div>
+          )}
+
+          {view === "password" && (
+            <div className="auth__panel">
+              <input
+                className="auth__input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoFocus
+              />
+              <input
+                className="auth__input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handlePasswordSignIn();
+                }}
+              />
+              <button className="auth__button auth__button--primary" type="button" onClick={handlePasswordSignIn} disabled={busy}>
+                Sign in
+              </button>
+              <button className="auth__back" type="button" onClick={() => { setView("start"); setPassword(""); }}>
+                ← Back
+              </button>
+            </div>
+          )}
+
+          {view === "sign-up" && (
+            <div className="auth__panel">
+              <input
+                className="auth__input"
+                type="text"
+                value={signUpName}
+                onChange={(e) => setSignUpName(e.target.value)}
+                placeholder="Your name"
+                autoFocus
+              />
+              <input
+                className="auth__input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              <input
+                className="auth__input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password (at least 8 characters)"
+              />
+              <input
+                className="auth__input"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm password"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSignUp();
+                }}
+              />
+              <button className="auth__button auth__button--primary" type="button" onClick={handleSignUp} disabled={busy}>
+                Create account
+              </button>
+              <p className="auth__hint">Already have an account? <button className="auth__link" type="button" onClick={() => { setView("start"); setPassword(""); setConfirmPassword(""); }}>Sign in</button></p>
+              <button className="auth__back" type="button" onClick={() => { setView("start"); setPassword(""); setConfirmPassword(""); }}>
+                ← Back
+              </button>
             </div>
           )}
 

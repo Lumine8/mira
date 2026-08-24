@@ -8,6 +8,7 @@ export interface AuthConfig {
   guest_cap_per_day: number;
   email_enabled: boolean;
   google_enabled: boolean;
+  password_enabled: boolean;
 }
 
 export interface AuthUser {
@@ -19,8 +20,10 @@ export interface AuthUser {
 }
 
 export interface AuthSuccess {
-  token: string;
+  access_token: string;
+  refresh_token: string;
   user: AuthUser;
+  has_password: boolean;
 }
 
 export interface MagicLinkResponse {

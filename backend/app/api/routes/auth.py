@@ -5,7 +5,16 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import User
-from app.schemas import AuthSuccess, MagicLinkRequest, MagicLinkVerify, UserOut
+from app.schemas import (
+    AuthSuccess,
+    ChangePasswordRequest,
+    MagicLinkRequest,
+    MagicLinkVerify,
+    SetPasswordRequest,
+    SignInPasswordRequest,
+    SignUpRequest,
+    UserOut,
+)
 from app.services.audit import AuditService
 from app.services.auth.service import AuthError, AuthService
 from app.services.identity import client_ip, get_current_user_id
@@ -14,13 +23,22 @@ from app.services.moderation import ModerationError, ModerationService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _user_out(user: User) -> UserOut:
+def _user_out(user: User, *, has_password: bool = False) -> UserOut:
     return UserOut(
         id=user.id,
         name=user.name,
         role=user.role,
         email=user.email,
         google=bool(user.google_sub),
+    )
+
+
+def _auth_success(user: User, access_token: str, refresh_token: str, *, has_password: bool = False) -> AuthSuccess:
+    return AuthSuccess(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=_user_out(user),
+        has_password=has_password,
     )
 
 
@@ -35,6 +53,7 @@ def auth_config() -> dict:
         "guest_cap_per_day": s.guest_message_cap_per_day,
         "email_enabled": s.smtp_configured,
         "google_enabled": s.google_oauth_configured,
+        "password_enabled": s.password_auth_enabled,
     }
 
 
@@ -65,7 +84,7 @@ def verify_magic_link(payload: MagicLinkVerify, db: Session = Depends(get_db)) -
     if result is None:
         raise HTTPException(status_code=400, detail="invalid or expired sign-in code")
     user, access_token, refresh_token = result
-    return AuthSuccess(access_token=access_token, refresh_token=refresh_token, user=_user_out(user))
+    return _auth_success(user, access_token, refresh_token, has_password=AuthService(db).has_password(user.id))
 
 
 @router.get("/google/authorize")
@@ -141,3 +160,99 @@ def delete_my_account(
         user_agent=request.headers.get("user-agent"),
     )
     return {"deleted": True}
+
+
+# ── password auth (optional, alongside magic link) ──────────────────────
+
+
+@router.post("/sign-up", response_model=AuthSuccess)
+def sign_up(payload: SignUpRequest, request: Request, db: Session = Depends(get_db)) -> AuthSuccess:
+    """Create a new account with email + password. The email must not already exist."""
+    from sqlalchemy import select as sel
+
+    settings = get_settings()
+    if not settings.password_auth_enabled:
+        raise HTTPException(status_code=403, detail="password sign-up is not enabled on this instance")
+    existing = db.execute(
+        sel(User).where(User.email == payload.email.strip().lower())
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="an account with that email already exists")
+    user = User(
+        name=payload.name.strip()[:120] or "user",
+        role=PERSON_ROLE,
+        email=payload.email.strip().lower(),
+    )
+    db.add(user)
+    db.flush()
+    auth = AuthService(db)
+    auth.set_password(user.id, payload.password)
+    db.refresh(user)
+    access_token = auth.create_access_token(user)
+    refresh_token = auth.create_session(user, user_agent=request.headers.get("user-agent"))
+    AuditService(db).log(
+        "sign_up",
+        user_id=user.id,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return _auth_success(user, access_token, refresh_token, has_password=True)
+
+
+@router.post("/sign-in/password", response_model=AuthSuccess)
+def sign_in_password(
+    payload: SignInPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> AuthSuccess:
+    """Sign in with email + password."""
+    result = AuthService(db).verify_password(payload.email, payload.password)
+    if result is None:
+        raise HTTPException(status_code=401, detail="invalid email or password")
+    user, access_token, refresh_token = result
+    AuditService(db).log(
+        "sign_in_password",
+        user_id=user.id,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return _auth_success(user, access_token, refresh_token, has_password=True)
+
+
+@router.post("/set-password")
+def set_password(
+    payload: SetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
+    """Set a password for an existing magic-link/Google account."""
+    try:
+        AuthService(db).set_password(user_id, payload.password)
+    except AuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService(db).log("set_password", user_id=user_id, ip=client_ip(request))
+    return {"ok": True}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
+    """Change password. Requires current password verification."""
+    import bcrypt as bcrypt_lib
+
+    user = db.get(User, user_id)
+    if user is None or user.password_hash is None:
+        raise HTTPException(status_code=400, detail="no password set for this account")
+    if not bcrypt_lib.checkpw(payload.current_password.encode(), user.password_hash.encode()):
+        raise HTTPException(status_code=401, detail="current password is incorrect")
+    try:
+        AuthService(db).set_password(user_id, payload.new_password)
+    except AuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService(db).log("change_password", user_id=user_id, ip=client_ip(request))
+    return {"ok": True}

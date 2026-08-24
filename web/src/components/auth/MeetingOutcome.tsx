@@ -64,7 +64,7 @@ export default function MeetingOutcome({ email, onSignIn, onLeave, onPorch }: Me
     setError(null);
     try {
       const resp = await meetingAdmit(email);
-      onSignIn(resp.token);
+      onSignIn(resp.access_token);
     } catch {
       setError("The door did not open just now. Try again in a moment.");
     } finally {

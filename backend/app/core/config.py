@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     jwt_access_token_secret: str = ""
     jwt_access_token_ttl_minutes: int = 15
 
+    # Password auth: optional. When enabled, users can set a password alongside
+    # magic link. Passwords are hashed with bcrypt. Empty = password auth disabled.
+    password_auth_enabled: bool = True
+    bcrypt_rounds: int = 12
+
     # Phase 3 guest mode. When on, anonymous visitors may talk (capped per
     # device) without an account; the web app identifies them with a stable
     # client-side fingerprint sent as X-Guest-Id. When off (default, and the

@@ -46,6 +46,10 @@ def _settings(monkeypatch, **overrides) -> None:
         smtp_port = 587
         smtp_password = ""
         mira_access_token = "sekrit"
+        jwt_access_token_secret = "sekrit"
+        jwt_access_token_ttl_minutes = 15
+        bcrypt_rounds = 4
+        password_auth_enabled = True
         google_oauth_client_id = "client"
         google_oauth_client_secret = "secret"
         google_oauth_redirect_uri = "https://mira.example/auth/google/callback"
@@ -68,9 +72,10 @@ def _settings(monkeypatch, **overrides) -> None:
 
 def test_session_round_trip(db) -> None:
     user = _founder(db)
-    token = AuthService(db).create_session(user)
-    assert token and len(token) > 20
-    got = AuthService(db).session_user(token)
+    access_token, refresh_token = AuthService(db).create_session(user)
+    assert access_token and len(access_token) > 20
+    assert refresh_token and len(refresh_token) > 20
+    got = AuthService(db).session_user(refresh_token)
     assert got is not None and got.id == user.id
 
 
@@ -82,10 +87,10 @@ def test_session_unknown_token(db) -> None:
 def test_session_revoked(db) -> None:
     user = _founder(db)
     svc = AuthService(db)
-    token = svc.create_session(user)
-    assert svc.revoke_session(token) is True
-    assert svc.session_user(token) is None
-    assert svc.revoke_session(token) is True  # idempotent
+    _, refresh_token = svc.create_session(user)
+    assert svc.revoke_session(refresh_token) is True
+    assert svc.session_user(refresh_token) is None
+    assert svc.revoke_session(refresh_token) is True  # idempotent
 
 
 # -- magic link -----------------------------------------------------------
@@ -95,10 +100,10 @@ def test_magic_link_request_and_verify(db) -> None:
     _founder(db)
     svc = AuthService(db)
     code = svc.request_magic_link("Someone@Example.com")
-    user, token = svc.verify_magic_link("someone@example.com", code.lower())
+    user, access_token, refresh_token = svc.verify_magic_link("someone@example.com", code.lower())
     assert user.email == "someone@example.com"
     assert user.role == "person"
-    assert AuthService(db).session_user(token).id == user.id
+    assert AuthService(db).session_user(refresh_token).id == user.id
 
 
 def test_magic_link_code_is_single_use(db) -> None:
@@ -176,10 +181,10 @@ def test_google_callback_exchange(monkeypatch, db) -> None:
     monkeypatch.setattr(auth_module.httpx, "post", lambda *a, **k: _Resp())
     monkeypatch.setattr(auth_module.httpx, "get", lambda *a, **k: _Profile())
 
-    user, token = svc.google_callback("authcode", state)
+    user, access_token, refresh_token = svc.google_callback("authcode", state)
     assert user.google_sub == "google-123"
     assert user.email == "guy@gmail.com"
-    assert AuthService(db).session_user(token).id == user.id
+    assert AuthService(db).session_user(refresh_token).id == user.id
 
 
 # -- identity resolution --------------------------------------------------
@@ -210,7 +215,7 @@ def test_resolve_session_bearer(monkeypatch, db) -> None:
     other = User(name="Nia", role="person", email="nia@x.co")
     db.add(other)
     db.commit()
-    token = AuthService(db).create_session(other)
+    token = AuthService(db).create_session(other)[1]  # refresh token
     assert identity.resolve_user_id(db, authorization=f"Bearer {token}") == other.id
 
 
@@ -222,7 +227,7 @@ def test_resolve_session_via_x_mira_token(monkeypatch, db) -> None:
     other = User(name="Nia", role="person", email="nia@x.co")
     db.add(other)
     db.commit()
-    token = AuthService(db).create_session(other)
+    token = AuthService(db).create_session(other)[1]  # refresh token
     assert identity.resolve_user_id(db, x_mira_token=token) == other.id
     assert identity.resolve_user_id(db, query_token=token) == other.id
 
@@ -237,8 +242,8 @@ def test_resolve_invalid_bearer_raises(monkeypatch, db) -> None:
 def test_ws_resolution_session_or_founder(monkeypatch, db) -> None:
     _settings(monkeypatch)
     founder = _founder(db)
-    token = AuthService(db).create_session(founder)
-    assert identity.resolve_ws_user_id(db, token=token) == founder.id
+    _, refresh_token = AuthService(db).create_session(founder)
+    assert identity.resolve_ws_user_id(db, token=refresh_token) == founder.id
     assert identity.resolve_ws_user_id(db, token="sekrit") == founder.id
     assert identity.resolve_ws_user_id(db, token="bogus") is None
     assert identity.resolve_ws_user_id(db) is None

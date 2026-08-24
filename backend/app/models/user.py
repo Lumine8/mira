@@ -44,6 +44,7 @@ class User(Base):
     # Guest-mode identity: a client-generated device fingerprint (or the IP as
     # fallback). Unique so the same device always lands on the same guest world
     # — "one person cannot spin up infinite free Mirus".
+    password_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), unique=True)
     last_ip: Mapped[Optional[str]] = mapped_column(String(64))
     # Phase 4 age verification: dedicated columns instead of the last_ip hack.

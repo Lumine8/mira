@@ -165,6 +165,38 @@ class AuthService:
 
     # -- magic link ---------------------------------------------------------
 
+    def set_password(self, user_id: int, password: str) -> None:
+        """Set or change a user's password. Hashed with bcrypt."""
+        import bcrypt
+        user = self.db.get(User, user_id)
+        if user is None:
+            raise AuthError("user not found")
+        if len(password) < 8:
+            raise AuthError("password must be at least 8 characters")
+        rounds = get_settings().bcrypt_rounds
+        user.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds)).decode()
+        self.db.commit()
+
+    def verify_password(self, email: str, password: str) -> tuple[User, str, str] | None:
+        """Sign in with email + password. Returns (user, access_token, refresh_token) or None."""
+        import bcrypt
+        email = email.strip().lower()
+        user = self.db.execute(
+            select(User).where(User.email == email)
+        ).scalar_one_or_none()
+        if user is None or user.password_hash is None:
+            return None
+        if not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
+            return None
+        access_token = self.create_access_token(user)
+        refresh_token = self.create_session(user)
+        return user, access_token, refresh_token
+
+    def has_password(self, user_id: int) -> bool:
+        """Check if a user has a password set."""
+        user = self.db.get(User, user_id)
+        return bool(user and user.password_hash)
+
     def request_magic_link(self, email: str) -> str:
         """Issue a one-time code for ``email`` and deliver it. Returns the code
         (so the route can expose it in dev when no SMTP is configured)."""

@@ -1,4 +1,13 @@
-from app.schemas.auth import AuthSuccess, MagicLinkRequest, MagicLinkVerify, UserOut
+from app.schemas.auth import (
+    AuthSuccess,
+    ChangePasswordRequest,
+    MagicLinkRequest,
+    MagicLinkVerify,
+    SetPasswordRequest,
+    SignInPasswordRequest,
+    SignUpRequest,
+    UserOut,
+)
 from app.schemas.conversation import (
     CallStartRequest,
     CallStartResponse,
@@ -49,6 +58,7 @@ from app.schemas.waitlist import (
 
 __all__ = [
     "AuthSuccess",
+    "ChangePasswordRequest",
     "CallStartRequest",
     "CallStartResponse",
     "ConversationDetailOut",
@@ -81,6 +91,9 @@ __all__ = [
     "SecretDoorIn",
     "SecretDoorOut",
     "SecretRoomOut",
+    "SetPasswordRequest",
+    "SignInPasswordRequest",
+    "SignUpRequest",
     "SpeakRequest",
     "SystemSnapshot",
     "SystemSnapshotOut",

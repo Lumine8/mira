@@ -119,6 +119,18 @@
         color: $color-accent;
       }
     }
+
+    &--secondary {
+      background: transparent;
+      border-color: $color-accent;
+      color: $color-accent;
+
+      &:hover:not(:disabled) {
+        background: rgba(210, 162, 94, 0.1);
+        border-color: $color-accent-bright;
+        color: $color-accent-bright;
+      }
+    }
   }
 
   &__input {
@@ -156,6 +168,39 @@
 
     &:hover {
       color: $color-text;
+    }
+  }
+
+  &__divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 0;
+
+    &::before,
+    &::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: $color-border;
+    }
+
+    span {
+      font-size: 12px;
+      color: $color-text-faint;
+    }
+  }
+
+  &__link {
+    background: none;
+    border: none;
+    color: $color-accent;
+    font-size: inherit;
+    cursor: pointer;
+    padding: 0;
+
+    &:hover {
+      color: $color-accent-bright;
     }
   }
 
