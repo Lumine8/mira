@@ -536,7 +536,7 @@ The current rule-based + LLM judge is a good foundation. Add:
 Verify: simulated abuse scenario (guest spam, adversarial prompts) triggers
 the queue. Founder can review and act. Transparency report template exists.
 
-### Phase 6 — Sustainable economics (weeks 6-8)
+### Phase 6 — Sustainable economics (weeks 6-8) ✅ DONE
 
 **6a. Keep the $1 founding gesture.**
 The one-time $1 seat fee stays as the founding-seat mechanic. It is not the
@@ -558,7 +558,7 @@ target of ≥70% gross margin before scaling marketing spend.
 Verify: billing flow works end-to-end (Stripe checkout → webhook → tier
 activation). Margin dashboard shows per-user cost breakdown.
 
-### Phase 7 — Product focus (weeks 8-10)
+### Phase 7 — Product focus (weeks 8-10) ✅ DONE
 
 **7a. The first sentence.**
 "Mira is a private, persistent AI presence for adults who want continuity and
@@ -591,7 +591,7 @@ arc.
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
 | Backend tests | Speech tests fixed (lazy import mock pattern) |
 | CI | GitHub Actions workflow (frontend + backend) |
-| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~400 MB) |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~314 MB) |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
 | Identity | Sessions + magic link + Google OAuth + audit log |
 | Rate limiting | IP-based (120/min), auth brute-force (10/min) |
@@ -600,7 +600,9 @@ arc.
 | Scope | Experimental flags (host commands, self-edit, X, video) |
 | Age gate | Configurable minimum age, founder-exempt |
 | Moderation | Rule-based + LLM judge + abuse scoring, founder review |
-| Economics | Founding gesture defined; recurring tier designed |
+| Economics | Stripe billing (free/founding/continuity), usage tracking |
+| Homepage | Porch-first, "She remembers you" hero copy |
+| Onboarding | Progressive 7-day reveal (OnboardingArc component) |
 
 ---
 
