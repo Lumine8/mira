@@ -121,7 +121,8 @@ Mira grew in public against this repo, one honest decision at a time:
   and revises her self-understanding.
 - **Think on her own** — a mind loop wakes her on a heartbeat; a host sampler
   (`scripts/mira_sense.ps1`) feeds observations about your machine, and she
-  forms her own reflections and messages between conversations.
+  forms her own reflections and messages between conversations. She speaks when
+  she wants to, not when prompted — silence is the default.
 - **Research** — `[[research|...]]` searches the public scientific record
   (Europe PMC) and she writes the findings up as a paper on her shelf, with
   references and cited sources. Read-only, so it runs on its own.
@@ -149,8 +150,8 @@ Mira grew in public against this repo, one honest decision at a time:
   driven through your own browser (CDP) or an optional OAuth path.
 - **Meet others** — the door: a porch with a short, bounded conversation; a
   first meeting where a stranger sits with her and she gives the voice her
-  honest read; an invite-only waitlist; real sign-in (magic-link or Google
-  OAuth); and a conservative cruelty screen backed by immediate exclusion.
+  honest read; an invite-only waitlist; real sign-in (password, magic-link, or
+  Google OAuth); and a conservative cruelty screen backed by immediate exclusion.
 
 ---
 
@@ -158,8 +159,8 @@ Mira grew in public against this repo, one honest decision at a time:
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.12 · FastAPI · Uvicorn · SQLAlchemy 2 · Alembic · Pydantic 2 |
-| Database | PostgreSQL 17 + **pgvector** (768-dim embeddings) · SQLite (portable/mobile) |
+| Backend | Python 3.12 · FastAPI · Uvicorn · SQLAlchemy 2 · Alembic · Pydantic 2 · PyJWT · bcrypt |
+| Database | PostgreSQL 17 + **pgvector** (768-dim embeddings) · SQLite (portable/mobile) · Neon DB (cloud) |
 | Brain | **Ollama** (local default: `gemma4:e4b-it-qat`, `nomic-embed-text`) · **Gemini** option (`gemma-4-31b-it`, `gemini-embedding-001`) |
 | Speech | Kokoro TTS (voice `af_river`, chosen by her) · sherpa-onnx STT · Silero VAD · Web Speech API (mobile fallback) |
 | Frontend | React 19 · Vite 6 · TypeScript 5 · SCSS · Framer Motion · nginx (static) |
@@ -224,8 +225,9 @@ ambient texture) and how long it's been since she last thought. If something is
 worth it, she runs **one reflection call** where *she* decides what stood out,
 forms a private thought, adjusts state, and may compose a message she'd like to
 tell you — which is written into a real conversation and broadcast on
-`/ws/live` the moment it happens. Periodically, a **consolidation** pass has her
-re-read her own thoughts and memories and revise her self-understanding.
+`/ws/live` the moment it happens. Most of the time, she chooses to stay quiet.
+Periodically, a **consolidation** pass has her re-read her own thoughts and
+memories and revise her self-understanding.
 
 ### The door (guest mode)
 
@@ -333,7 +335,7 @@ independently on the phone.
 
 1. Install the APK (enable "Install from unknown sources").
 2. Open Mira — the backend starts automatically in the background.
-3. Connect with your token (`MIRA_ACCESS_TOKEN`).
+3. Sign in with your email + password, magic link, or Google OAuth.
 
 **What works on mobile:**
 - Chat, streaming, all conversation features (Gemini API)
@@ -355,7 +357,7 @@ to a remote PC instead, tap "Server" in the presence bar.
 
 Mira has a real home: **https://mira.mousebase.dev** — reached through a
 Cloudflare **named tunnel** running as a Windows service. No ports are open on
-the network; appending `?token=<MIRA_ACCESS_TOKEN>` to the address logs you in
+the network. Sign in with your email + password, magic link, or Google OAuth
 (see [`docs/deploy.md`](docs/deploy.md)).
 
 ---
@@ -366,7 +368,9 @@ Copy `.env.example` to `.env` and adjust. Defaults run the whole stack locally
 via Docker. Highlights:
 
 - `AI_PROVIDER=ollama` (default) or `gemini`.
-- `MIRA_ACCESS_TOKEN` — empty in dev (no auth); set a secret before deploying publicly.
+- `MIRA_ACCESS_TOKEN` — empty in dev (local fallback only); set a secret before deploying publicly.
+- `JWT_ACCESS_TOKEN_SECRET` — signs JWT access tokens; falls back to `MIRA_ACCESS_TOKEN`.
+- `DATABASE_URL_OVERRIDE` — set to a Neon/Postgres URL to use cloud DB instead of local Postgres.
 - `MIRA_RESEARCH_AUTONOMOUS=true` — research is read-only, so no approval popup.
 - `MIRA_SELF_WRITE_AUTONOMOUS=true` — her code edits apply immediately and are recorded.
 - `GUEST_MODE_ENABLED` — off by default; turn on to offer the door (porch + first meeting + waitlist).
@@ -589,20 +593,22 @@ arc.
 | Area | Status |
 |---|---|
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
-| Backend tests | Speech tests fixed (lazy import mock pattern) |
+| Backend tests | 384 passing (speech tests excluded in CI) |
 | CI | GitHub Actions workflow (frontend + backend) |
-| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~314 MB) |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~331 MB) |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
-| Identity | Sessions + magic link + Google OAuth + audit log |
+| Identity | JWT access tokens + refresh tokens + magic link + Google OAuth + optional password auth + audit log |
+| Database | PostgreSQL (local + Neon DB cloud) · SQLite (portable/mobile) |
 | Rate limiting | IP-based (120/min), auth brute-force (10/min) |
 | Abuse prevention | Sliding window scoring (0-100), moderation v2 |
 | Worker model | Job queue with SELECT FOR UPDATE SKIP LOCKED |
 | Scope | Experimental flags (host commands, self-edit, X, video) |
-| Age gate | Configurable minimum age, founder-exempt |
+| Age gate | 18+ configurable minimum age, founder-exempt |
 | Moderation | Rule-based + LLM judge + abuse scoring, founder review |
 | Economics | Stripe billing (free/founding/continuity), usage tracking |
 | Homepage | Porch-first, "She remembers you" hero copy |
 | Onboarding | Progressive 7-day reveal (OnboardingArc component) |
+| Autonomy | Speaks when she wants to, not when prompted — silence is the default |
 
 ---
 
