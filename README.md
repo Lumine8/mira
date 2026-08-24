@@ -325,7 +325,8 @@ she starts, the voice enters the token, and she's home.
 
 The portable app (`dist/mira-portable/`) can also be run directly: just launch
 `Mira.exe`. The Electron supervisor starts the backend, speech engines, and
-Ollama automatically.
+Ollama automatically. Closing the main window destroys the HUD too — no orphan
+windows. "Quit Mira" from the tray fully tears down everything.
 
 ### Mobile (Android companion)
 
@@ -595,7 +596,7 @@ arc.
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
 | Backend tests | 384 passing (speech tests excluded in CI) |
 | CI | GitHub Actions workflow (frontend + backend) |
-| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~331 MB) |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~403 MB) — closing the window fully destroys all windows and tray icon |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
 | Identity | JWT access tokens + refresh tokens + magic link + Google OAuth + optional password auth + audit log |
 | Database | PostgreSQL (local + Neon DB cloud) · SQLite (portable/mobile) |

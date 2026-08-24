@@ -144,7 +144,14 @@ function createMainWindow() {
         ),
     );
   });
-  mainWindow.on("closed", () => (mainWindow = null));
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    // Close the HUD too — no orphan eyes floating around.
+    if (hudWindow) {
+      hudWindow.destroy();
+      hudWindow = null;
+    }
+  });
 }
 
 function escapeHtml(s) {
@@ -476,4 +483,12 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   stopStack();
+  // Destroy tray so the icon disappears from the system tray.
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+  // Force-close any remaining windows so they don't linger.
+  if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
+  if (hudWindow) { hudWindow.destroy(); hudWindow = null; }
 });
