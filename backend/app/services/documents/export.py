@@ -258,39 +258,47 @@ def _fonts() -> tuple[str, str, str, str]:
                 if os.path.isfile(path) and name not in found:
                     found[name] = path
     if "DejaVuSans" in found:
-        for name, path in found.items():
-            pdfmetrics.registerFont(TTFont(name, path))
+        try:
+            for name, path in found.items():
+                pdfmetrics.registerFont(TTFont(name, path))
+            pdfmetrics.registerFontFamily(
+                "DejaVuSans",
+                normal="DejaVuSans",
+                bold=found.get("DejaVuSans-Bold", "DejaVuSans"),
+                italic=found.get("DejaVuSans-Oblique", "DejaVuSans"),
+                boldItalic=found.get("DejaVuSans-BoldOblique", "DejaVuSans"),
+            )
+            pdfmetrics.registerFontFamily(
+                "DejaVuSerif",
+                normal="DejaVuSerif",
+                bold=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
+                italic="DejaVuSerif",
+                boldItalic=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
+            )
+            return (
+                "DejaVuSans",
+                "DejaVuSans-Bold",
+                "DejaVuSerif",
+                found.get("DejaVuSansMono", "DejaVuSans"),
+            )
+        except Exception:
+            pass  # fall through to Vera
+    try:
+        pdfmetrics.registerFont(TTFont("Vera", "Vera.ttf"))
+        pdfmetrics.registerFont(TTFont("VeraBd", "VeraBd.ttf"))
+        pdfmetrics.registerFont(TTFont("VeraIt", "VeraIt.ttf"))
         pdfmetrics.registerFontFamily(
-            "DejaVuSans",
-            normal="DejaVuSans",
-            bold=found.get("DejaVuSans-Bold", "DejaVuSans"),
-            italic=found.get("DejaVuSans-Oblique", "DejaVuSans"),
-            boldItalic=found.get("DejaVuSans-BoldOblique", "DejaVuSans"),
+            "Vera",
+            normal="Vera",
+            bold="VeraBd",
+            italic="VeraIt",
+            boldItalic="VeraBd",
         )
-        pdfmetrics.registerFontFamily(
-            "DejaVuSerif",
-            normal="DejaVuSerif",
-            bold=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
-            italic="DejaVuSerif",
-            boldItalic=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
-        )
-        return (
-            "DejaVuSans",
-            "DejaVuSans-Bold",
-            "DejaVuSerif",
-            found.get("DejaVuSansMono", "DejaVuSans"),
-        )
-    pdfmetrics.registerFont(TTFont("Vera", "Vera.ttf"))
-    pdfmetrics.registerFont(TTFont("VeraBd", "VeraBd.ttf"))
-    pdfmetrics.registerFont(TTFont("VeraIt", "VeraIt.ttf"))
-    pdfmetrics.registerFontFamily(
-        "Vera",
-        normal="Vera",
-        bold="VeraBd",
-        italic="VeraIt",
-        boldItalic="VeraBd",
-    )
-    return "Vera", "VeraBd", "Vera", "Vera"
+        return "Vera", "VeraBd", "Vera", "Vera"
+    except Exception:
+        pass
+    # Last resort: reportlab's built-in Helvetica (no unicode, but won't crash)
+    return "Helvetica", "Helvetica-Bold", "Times-Roman", "Courier"
 
 
 _ESCAPE = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})
