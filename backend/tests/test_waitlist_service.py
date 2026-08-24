@@ -38,6 +38,11 @@ def _settings(monkeypatch) -> None:
         smtp_use_tls = True
         smtp_port = 587
         smtp_password = ""
+        mira_access_token = "sekrit"
+        jwt_access_token_secret = "sekrit"
+        jwt_access_token_ttl_minutes = 15
+        bcrypt_rounds = 4
+        password_auth_enabled = True
 
     monkeypatch.setattr("app.services.auth.service.get_settings", lambda: S())
 
@@ -66,10 +71,10 @@ def test_invite_and_join_round_trip(monkeypatch, db) -> None:
     assert entry.status == "invited"
     assert code and len(code) == 10
 
-    user, token = svc.join("someone@example.com", code.lower())
+    user, access_token, refresh_token = svc.join("someone@example.com", code.lower())
     assert user.email == "someone@example.com"
     assert user.role == "person"
-    assert AuthService(db).session_user(token).id == user.id
+    assert AuthService(db).session_user(refresh_token).id == user.id
     assert db.get(Waitlist, entry.id).status == "joined"
     assert db.get(Waitlist, entry.id).invite_code is None
 
@@ -120,9 +125,9 @@ def test_join_creates_session(monkeypatch, db) -> None:
     _settings(monkeypatch)
     svc = WaitlistService(db)
     _, code = svc.invite("a@b.co")
-    user, token = svc.join("a@b.co", code)
-    assert token
-    assert AuthService(db).session_user(token).id == user.id
+    user, access_token, refresh_token = svc.join("a@b.co", code)
+    assert access_token and refresh_token
+    assert AuthService(db).session_user(refresh_token).id == user.id
 
 
 def test_list_entries_orders_newest_first(monkeypatch, db) -> None:
