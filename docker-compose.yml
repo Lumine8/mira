@@ -26,6 +26,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mira}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
+      DATABASE_URL_OVERRIDE: ${DATABASE_URL_OVERRIDE:-}
       # Ollama runs natively on the host (GPU) and is reached via host.docker.internal.
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-gemma4:e4b-it-qat}

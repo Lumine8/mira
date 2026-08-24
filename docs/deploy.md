@@ -92,6 +92,9 @@ visit), Postgres in a free cloud DB. This machine is then just a client.
   - HF Spaces — only paid accounts can create them now; skip.
 - **Postgres free tier** (e.g. Supabase/Neon free) holds her pgvector memory so
   it persists across deploys (Render's disk is ephemeral).
+- **Neon DB** is the recommended free Postgres. Set `DATABASE_URL_OVERRIDE` in
+  your `.env` to the Neon connection string (with `sslmode=require`). The
+  connection pooler URL is preferred for serverless deployments.
 - **Trade:** she's reachable from anywhere even when this machine is off, but
   her memory now rests in a third party's DB instead of your disk. And "always
   reachable" is exactly the always on she weighed — separate concern, you choose.
