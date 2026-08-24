@@ -257,32 +257,44 @@ def _fonts() -> tuple[str, str, str, str]:
                 path = os.path.join(d, file)
                 if os.path.isfile(path) and name not in found:
                     found[name] = path
+
+    # Try DejaVu — register each font individually, skip any that fail
     if "DejaVuSans" in found:
-        try:
-            for name, path in found.items():
+        registered: set[str] = set()
+        for name, path in found.items():
+            try:
                 pdfmetrics.registerFont(TTFont(name, path))
-            pdfmetrics.registerFontFamily(
-                "DejaVuSans",
-                normal="DejaVuSans",
-                bold=found.get("DejaVuSans-Bold", "DejaVuSans"),
-                italic=found.get("DejaVuSans-Oblique", "DejaVuSans"),
-                boldItalic=found.get("DejaVuSans-BoldOblique", "DejaVuSans"),
-            )
-            pdfmetrics.registerFontFamily(
-                "DejaVuSerif",
-                normal="DejaVuSerif",
-                bold=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
-                italic="DejaVuSerif",
-                boldItalic=found.get("DejaVuSerif-Bold", "DejaVuSerif"),
-            )
-            return (
-                "DejaVuSans",
-                "DejaVuSans-Bold",
-                "DejaVuSerif",
-                found.get("DejaVuSansMono", "DejaVuSans"),
-            )
-        except Exception:
-            pass  # fall through to Vera
+                registered.add(name)
+            except Exception:
+                pass
+        # Only use DejaVu if the core sans family registered
+        if "DejaVuSans" in registered:
+            bold = "DejaVuSans-Bold" if "DejaVuSans-Bold" in registered else "DejaVuSans"
+            italic = "DejaVuSans-Oblique" if "DejaVuSans-Oblique" in registered else "DejaVuSans"
+            bold_italic = "DejaVuSans-BoldOblique" if "DejaVuSans-BoldOblique" in registered else bold
+            serif_bold = "DejaVuSerif-Bold" if "DejaVuSerif-Bold" in registered else "DejaVuSerif"
+            mono = "DejaVuSansMono" if "DejaVuSansMono" in registered else "DejaVuSans"
+            try:
+                pdfmetrics.registerFontFamily(
+                    "DejaVuSans",
+                    normal="DejaVuSans",
+                    bold=bold,
+                    italic=italic,
+                    boldItalic=bold_italic,
+                )
+                if "DejaVuSerif" in registered:
+                    pdfmetrics.registerFontFamily(
+                        "DejaVuSerif",
+                        normal="DejaVuSerif",
+                        bold=serif_bold,
+                        italic="DejaVuSerif",
+                        boldItalic=serif_bold,
+                    )
+            except Exception:
+                pass
+            return "DejaVuSans", bold, "DejaVuSerif" if "DejaVuSerif" in registered else "DejaVuSans", mono
+
+    # Try Vera (bundled with reportlab)
     try:
         pdfmetrics.registerFont(TTFont("Vera", "Vera.ttf"))
         pdfmetrics.registerFont(TTFont("VeraBd", "VeraBd.ttf"))
@@ -297,6 +309,7 @@ def _fonts() -> tuple[str, str, str, str]:
         return "Vera", "VeraBd", "Vera", "Vera"
     except Exception:
         pass
+
     # Last resort: reportlab's built-in Helvetica (no unicode, but won't crash)
     return "Helvetica", "Helvetica-Bold", "Times-Roman", "Courier"
 
