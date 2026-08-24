@@ -69,8 +69,9 @@ export default function PorchConversation({ onOpenSignIn, onRequestSeat, onMeeti
       try {
         const { conversation_id, opening, ended } = await porchStart();
         if (!alive()) return;
+        const greeting = opening || "I notice you're here. That's enough for now.";
         setMessages([
-          { id: -1, speaker: "mira", content: opening, source: "porch", created_at: new Date().toISOString() },
+          { id: -1, speaker: "mira", content: greeting, source: "porch", created_at: new Date().toISOString() },
         ]);
         if (ended) {
           setPhase("deciding");

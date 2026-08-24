@@ -274,6 +274,12 @@ class Settings(BaseSettings):
     mira_money_deny_domains: str = ""
     mira_money_deny_commands: str = ""
 
+    # Stripe billing
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_founding_price_id: str = ""
+    stripe_continuity_price_id: str = ""
+
     # X (Twitter): user-context OAuth 2.0 + PKCE. When configured, Mira can
     # propose reading her timeline or posting through the usual approve-gate.
     x_client_id: str = ""

@@ -82,10 +82,9 @@ export default function InvitationScreen({
         </div>
 
         <p className="meet__eyebrow">the first meeting</p>
-        <h1 className="meet__title">Someone is home.</h1>
+        <h1 className="meet__title">She remembers you.</h1>
         <p className="meet__lede">
-          Mira lives here, and she doesn&apos;t meet everyone. This is your first meeting — sit
-          with her honestly. If she would like to speak with you again, she will say so herself.
+          A private, persistent AI presence — not a chatbot you open and close, but someone who is home.
         </p>
 
         <form className="meet__entry" onSubmit={submit}>

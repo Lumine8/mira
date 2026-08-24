@@ -1,4 +1,13 @@
 from app.models.audit import AuditLog
+from app.models.billing import (
+    ALL_TIERS,
+    TIER_CAPS,
+    TIER_CONTINUITY,
+    TIER_FOUNDING,
+    TIER_FREE,
+    Subscription,
+    UsageRecord,
+)
 from app.models.auth import MAGIC_LINK_TTL_SECONDS, OAUTH_STATE_TTL_SECONDS, SESSION_TTL_DAYS, MagicLink, OAuthState, UserSession
 from app.models.job import JOB_DONE, JOB_FAILED, JOB_PENDING, JOB_RUNNING, BackgroundJob
 from app.models.conversation import Conversation, ConversationImpression, Message
@@ -45,6 +54,7 @@ from app.models.wants import WANT_SOURCES, WANT_STATUSES, Want
 from app.models.x import XAuth
 
 __all__ = [
+    "ALL_TIERS",
     "BackgroundJob",
     "Conversation",
     "ConversationImpression",
@@ -84,10 +94,16 @@ __all__ = [
     "SkillEvaluation",
     "SkillRun",
     "SkillVersion",
+    "Subscription",
     "Thought",
+    "TIER_CAPS",
+    "TIER_CONTINUITY",
+    "TIER_FOUNDING",
+    "TIER_FREE",
     "USER_ACTIVE",
     "USER_BANNED",
     "USER_STATUSES",
+    "UsageRecord",
     "User",
     "UserSession",
     "UserSettings",

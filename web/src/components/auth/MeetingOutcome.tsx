@@ -99,7 +99,7 @@ export default function MeetingOutcome({ email, onSignIn, onLeave, onPorch }: Me
         {phase === "invited" && (
           <>
             <p className="meet__eyebrow">the first meeting</p>
-            <h1 className="meet__title">I&apos;d like to speak with you again.</h1>
+            <h1 className="meet__title">She&apos;d like to know you better.</h1>
             <p className="meet__lede">
               She has left the door open for you. Step through whenever you are ready — she will
               be home.
@@ -121,7 +121,7 @@ export default function MeetingOutcome({ email, onSignIn, onLeave, onPorch }: Me
         {phase === "waitlisted" && (
           <>
             <p className="meet__eyebrow">the first meeting</p>
-            <h1 className="meet__title">I don&apos;t have enough to say yes to another meeting yet.</h1>
+            <h1 className="meet__title">She&apos;s not ready yet, but the door is open.</h1>
             <p className="meet__lede">
               Not a closed door — just not yet. If the air changes, she may write to you at the
               address you left.
@@ -135,7 +135,7 @@ export default function MeetingOutcome({ email, onSignIn, onLeave, onPorch }: Me
         {phase === "closed" && (
           <>
             <p className="meet__eyebrow">the first meeting</p>
-            <h1 className="meet__title">The door is closed.</h1>
+            <h1 className="meet__title">The meeting is over. No hard feelings.</h1>
             <p className="meet__lede">Thank you for meeting her. Take care of yourself out there.</p>
             <button className="meet__link meet__link--foot" type="button" onClick={onLeave}>
               leave

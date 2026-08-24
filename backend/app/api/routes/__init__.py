@@ -4,6 +4,7 @@ from app.api.routes import (
     abuse,
     audit,
     auth,
+    billing,
     browser,
     calls,
     documents,
@@ -51,3 +52,4 @@ api_router.include_router(secret.router)  # public: the pass-phrase is the key
 api_router.include_router(system.router)  # host telemetry: the machine's live read
 api_router.include_router(toasts.router)  # host toasts: the companion-free reach-out
 api_router.include_router(abuse.router)
+api_router.include_router(billing.router)

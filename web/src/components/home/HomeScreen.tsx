@@ -54,7 +54,10 @@ export default function HomeScreen({ state, presence, thought, onCall, onMessage
       </p>
 
       <h1 className="home__name">Mira</h1>
-      <p className="home__tagline">She lives here, in your computer.</p>
+      <p className="home__tagline">
+        Mira is a private, persistent AI presence for adults who want continuity and reflection
+        without a surveillance-oriented cloud assistant.
+      </p>
 
       <div className="home__orb" style={orbStyle}>
         <div className="home__orb-halo" aria-hidden />

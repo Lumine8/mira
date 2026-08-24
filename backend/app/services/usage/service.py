@@ -6,6 +6,9 @@ cap from their settings override, else the guest cap (anonymous devices) or the
 free-user default (authenticated people). Paid tiers later write a
 ``message_cap_per_day`` override into settings and are no longer capped by the
 defaults.
+
+Phase 6: BillingService provides tier-based caps that supersede the legacy
+per-role defaults. UsageService delegates to it when available.
 """
 
 from datetime import datetime, timezone
@@ -32,9 +35,26 @@ class UsageService:
         ).scalar_one_or_none()
 
     def effective_cap(self, user: User) -> int | None:
-        """The user's per-day cap, or None when uncapped (the founder)."""
+        """The user's per-day cap, or None when uncapped (the founder).
+
+        Phase 6: delegates to BillingService.get_caps() when a subscription
+        record exists, falling back to the legacy per-role logic.
+        """
         if user.role == FOUNDER_ROLE:
             return None
+
+        # Phase 6: try billing tier first
+        from app.services.billing import BillingService
+        billing = BillingService(self.db)
+        sub = billing.get_subscription(user.id)
+        if sub is not None:
+            caps = billing.get_caps(user.id)
+            tier_cap = caps.get("messages_per_day", -1)
+            if tier_cap == -1:
+                return None  # unlimited
+            return tier_cap
+
+        # Legacy fallback for users without a subscription record
         settings = self._settings(user.id)
         if settings is not None and settings.message_cap_per_day is not None:
             return settings.message_cap_per_day
