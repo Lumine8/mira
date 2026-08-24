@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RateLimitMiddleware)
 
     # The API lives at the root (what the desktop companion, host scripts, and
     # the tunnel's nginx already use) AND under /api — what the web bundle

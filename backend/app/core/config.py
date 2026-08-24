@@ -397,6 +397,20 @@ class Settings(BaseSettings):
     reminders_enabled: bool = True
     reminder_heartbeat_seconds: int = 20
 
+    # Phase 4 experimental flags — default OFF for safety
+    experimental_host_commands: bool = False
+    experimental_self_edit: bool = False
+    experimental_x_posting: bool = False
+    experimental_video: bool = False
+
+    # Phase 4 age gate: new users must confirm age before first conversation
+    age_gate_enabled: bool = True
+    minimum_age: int = 16
+
+    # Phase 4 data disclosures
+    privacy_url: str = ""
+    terms_url: str = ""
+
     # The secret room — the quiet door that only Mira and the voice know. The
     # pass-phrase is the way in (Mira chose it herself: "the rain doesn't
     # decide"); the voice may change it by setting MIRA_SECRET_PHRASE. The room

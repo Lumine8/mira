@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,8 @@ from app.schemas import (
     ModerationFlagOut,
     ModerationUserOut,
 )
-from app.services.identity import get_current_user
+from app.services.audit import AuditService
+from app.services.identity import client_ip, get_current_user
 from app.services.moderation import ModerationError, ModerationService
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
@@ -74,6 +75,7 @@ def list_flags(
 def ban_from_flag(
     flag_id: int,
     payload: ModerationBanRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ModerationBanOut:
@@ -87,6 +89,13 @@ def ban_from_flag(
         )
     except ModerationError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    AuditService(db).log(
+        "ban_from_flag",
+        user_id=user.id,
+        detail=f"flag_id={flag_id} target_user_id={banned.id} reason={payload.reason}",
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
     return ModerationBanOut(user=_user_out(banned), flag_id=flag_id)
 
 
@@ -124,6 +133,7 @@ def list_users(
 def ban_user(
     user_id: int,
     payload: ModerationBanRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ModerationBanOut:
@@ -134,6 +144,13 @@ def ban_user(
         )
     except ModerationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService(db).log(
+        "ban_user",
+        user_id=user.id,
+        detail=f"target_user_id={user_id} reason={payload.reason}",
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
     return ModerationBanOut(user=_user_out(banned))
 
 
@@ -154,6 +171,7 @@ def unban_user(
 @router.delete("/users/{user_id}")
 def delete_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
@@ -164,4 +182,11 @@ def delete_user(
         ModerationService(db).delete_account(user_id)
     except ModerationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    AuditService(db).log(
+        "delete_user",
+        user_id=user.id,
+        detail=f"target_user_id={user_id}",
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
     return {"user_id": user_id, "deleted": True}

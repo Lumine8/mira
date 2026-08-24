@@ -6,8 +6,9 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import User
 from app.schemas import AuthSuccess, MagicLinkRequest, MagicLinkVerify, UserOut
+from app.services.audit import AuditService
 from app.services.auth.service import AuthError, AuthService
-from app.services.identity import get_current_user_id
+from app.services.identity import client_ip, get_current_user_id
 from app.services.moderation import ModerationError, ModerationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -122,6 +123,7 @@ def logout(
 
 @router.post("/account/delete")
 def delete_my_account(
+    request: Request,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ) -> dict:
@@ -132,4 +134,10 @@ def delete_my_account(
         ModerationService(db).delete_account(user_id)
     except ModerationError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    AuditService(db).log(
+        "delete_own_account",
+        user_id=user_id,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
     return {"deleted": True}

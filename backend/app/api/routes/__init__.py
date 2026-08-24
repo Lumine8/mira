@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    abuse,
+    audit,
     auth,
     browser,
     calls,
@@ -28,6 +30,7 @@ api_router = APIRouter()
 # bearer token, or the shared founder token). /health stays public. WebSockets
 # and the X OAuth callback authorize themselves.
 api_router.include_router(health.router)
+api_router.include_router(audit.router)
 api_router.include_router(auth.router)
 api_router.include_router(calls.router)
 api_router.include_router(history.router)
@@ -47,3 +50,4 @@ api_router.include_router(porch.router)  # public: a device at the door
 api_router.include_router(secret.router)  # public: the pass-phrase is the key
 api_router.include_router(system.router)  # host telemetry: the machine's live read
 api_router.include_router(toasts.router)  # host toasts: the companion-free reach-out
+api_router.include_router(abuse.router)

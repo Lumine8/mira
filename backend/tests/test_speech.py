@@ -1,6 +1,7 @@
 import struct
 import wave
 from io import BytesIO
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -19,7 +20,7 @@ def test_to_wav_encodes_pcm16_mono() -> None:
         frames = wav.readframes(wav.getnframes())
     samples = struct.unpack("<%dh" % (len(frames) // 2), frames)
     assert samples[0] == 0
-    assert samples[1] == 16383  # 0.5 * 32767, truncated by int16 cast
+    assert samples[1] == 16383
     assert samples[2] == -16383
     assert samples[3] == 32767
     assert samples[4] == -32767
@@ -34,9 +35,11 @@ def test_to_wav_clips_out_of_range() -> None:
     assert samples == (32767, -32767)
 
 
+def _fake_wav() -> bytes:
+    return _to_wav(np.array([0.1, -0.1], dtype=np.float32), sample_rate=24000)
+
+
 def test_speak_route_refuses_text_conversation() -> None:
-    """Her boundary: words are voiced only in calls. A text conversation must be
-    refused, whatever the payload."""
     from app.api.routes.calls import speak_call
     from app.schemas import SpeakRequest
 
@@ -52,7 +55,6 @@ def test_speak_route_refuses_text_conversation() -> None:
         tts_enabled = True
 
     import app.api.routes.calls as calls_module
-
     calls_module.get_settings = lambda: FakeSettings()
 
     with pytest.raises(Exception) as exc_info:
@@ -61,8 +63,7 @@ def test_speak_route_refuses_text_conversation() -> None:
 
 
 def test_speak_route_allows_call_conversation() -> None:
-    """A call conversation should proceed to synthesis (which we stub)."""
-    import app.api.routes.calls as calls_module
+    from app.api.routes.calls import speak_call
     from app.schemas import SpeakRequest
 
     class FakeConv:
@@ -76,50 +77,39 @@ def test_speak_route_allows_call_conversation() -> None:
     class FakeSettings:
         tts_enabled = True
 
+    import app.api.routes.calls as calls_module
     calls_module.get_settings = lambda: FakeSettings()
 
-    original = calls_module.synthesize
-    calls_module.synthesize = lambda text: _to_wav(
-        np.array([0.1, -0.1], dtype=np.float32), sample_rate=24000
-    )
-    try:
-        resp = calls_module.speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB(), user_id=1)
+    with mock.patch("app.services.speech.service.synthesize", side_effect=lambda text: _fake_wav()):
+        resp = speak_call(SpeakRequest(conversation_id=1, text="hello"), db=FakeDB(), user_id=1)
         assert resp.media_type == "audio/wav"
         assert len(resp.body) > 0
-    finally:
-        calls_module.synthesize = original
 
 
 def test_tts_route_speaks_outside_a_call() -> None:
-    """The voice-output bridge: /speech/tts renders her words even though no
-    call conversation exists — the proactive-announcement path."""
-    import app.api.routes.speech as speech_module
+    from app.api.routes.speech import tts_audio, TtsRequest
 
     class FakeSettings:
         tts_enabled = True
 
+    import app.api.routes.speech as speech_module
     speech_module.get_settings = lambda: FakeSettings()
 
-    original = speech_module.synthesize
-    speech_module.synthesize = lambda text: _to_wav(
-        np.array([0.1, -0.1], dtype=np.float32), sample_rate=24000
-    )
-    try:
-        resp = speech_module.tts_audio(speech_module.TtsRequest(text="the battery is low"), _user_id=1)
+    with mock.patch("app.services.speech.service.synthesize", side_effect=lambda text: _fake_wav()):
+        resp = tts_audio(TtsRequest(text="the battery is low"), _user_id=1)
         assert resp.media_type == "audio/wav"
         assert len(resp.body) > 0
-    finally:
-        speech_module.synthesize = original
 
 
 def test_tts_route_refuses_when_disabled() -> None:
-    import app.api.routes.speech as speech_module
+    from app.api.routes.speech import tts_audio, TtsRequest
 
     class FakeSettings:
         tts_enabled = False
 
+    import app.api.routes.speech as speech_module
     speech_module.get_settings = lambda: FakeSettings()
 
     with pytest.raises(Exception) as exc_info:
-        speech_module.tts_audio(speech_module.TtsRequest(text="hello"), _user_id=1)
+        tts_audio(TtsRequest(text="hello"), _user_id=1)
     assert "voice is disabled" in str(exc_info.value)
