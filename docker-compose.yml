@@ -98,7 +98,24 @@ services:
       # spoken self_messages the HUD reads aloud.
       REMINDERS_ENABLED: ${REMINDERS_ENABLED:-true}
       REMINDER_HEARTBEAT_SECONDS: ${REMINDER_HEARTBEAT_SECONDS:-20}
+      # Phase 2: JWT auth
+      JWT_ACCESS_TOKEN_TTL_MINUTES: ${JWT_ACCESS_TOKEN_TTL_MINUTES:-15}
+      # Phase 4: Age gate
+      AGE_GATE_ENABLED: ${AGE_GATE_ENABLED:-true}
+      MINIMUM_AGE: ${MINIMUM_AGE:-18}
+      # Phase 4: Experimental flags (all OFF for production)
+      MIRA_EXPERIMENTAL_HOST_COMMANDS: ${MIRA_EXPERIMENTAL_HOST_COMMANDS:-false}
+      MIRA_EXPERIMENTAL_SELF_EDIT: ${MIRA_EXPERIMENTAL_SELF_EDIT:-false}
+      MIRA_EXPERIMENTAL_X_POSTING: ${MIRA_EXPERIMENTAL_X_POSTING:-false}
+      MIRA_EXPERIMENTAL_VIDEO: ${MIRA_EXPERIMENTAL_VIDEO:-false}
+      # Phase 5: Rate limiting
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      # Phase 6: Billing (disabled until Stripe is configured)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
+      # Development only — bind-mount lets Mira's self-edits land in the real repo.
+      # For production builds, remove this volume and use a baked-in COPY instead.
       - ./backend:/app
       - kokoro-models:/models
       # Runtime speech models (whisper STT + the KWS wake-word gate) live in

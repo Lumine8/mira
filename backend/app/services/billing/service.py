@@ -1,5 +1,8 @@
 """Billing service: tier management, Stripe integration, usage tracking."""
 
+import hashlib
+import hmac
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -157,7 +160,15 @@ class BillingService:
         return resp.json()["id"]
 
     def handle_stripe_webhook(self, payload: dict, sig_header: str | None = None) -> bool:
-        """Process a Stripe webhook event."""
+        """Process a Stripe webhook event with HMAC-SHA256 signature verification."""
+        settings = get_settings()
+
+        # Verify the webhook signature if a secret is configured
+        if settings.stripe_webhook_secret and sig_header:
+            if not self._verify_stripe_signature(payload, sig_header, settings.stripe_webhook_secret):
+                logger.warning("stripe webhook signature verification failed")
+                return False
+
         event_type = payload.get("type", "")
         data = payload.get("data", {}).get("object", {})
 
@@ -172,6 +183,39 @@ class BillingService:
 
         logger.info("unhandled stripe event: %s", event_type)
         return True
+
+    def _verify_stripe_signature(self, payload: dict, sig_header: str, secret: str) -> bool:
+        """Verify Stripe webhook HMAC-SHA256 signature.
+
+        The ``stripe-signature`` header format is ``t=timestamp&v1=signature``.
+        We reject timestamps older than 5 minutes to prevent replay attacks.
+        """
+        try:
+            parts = dict(item.split("=", 1) for item in sig_header.split(","))
+            timestamp = parts.get("t", "")
+            provided_sig = parts.get("v1", "")
+            if not timestamp or not provided_sig:
+                return False
+
+            # Replay protection: reject if timestamp is older than 5 minutes
+            ts = int(timestamp)
+            now = int(_now().timestamp())
+            if abs(now - ts) > 300:
+                logger.warning("stripe webhook timestamp too old: %d", ts)
+                return False
+
+            # Compute expected signature
+            signed_payload = f"{timestamp}.{json.dumps(payload, separators=(",", ":"))}"
+            expected_sig = hmac.new(
+                secret.encode("utf-8"),
+                signed_payload.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+
+            return hmac.compare_digest(expected_sig, provided_sig)
+        except Exception as exc:
+            logger.warning("stripe webhook signature check error: %s", exc)
+            return False
 
     def _handle_checkout_completed(self, data: dict) -> bool:
         user_id = int(data.get("metadata", {}).get("user_id", 0))

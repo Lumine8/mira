@@ -7,10 +7,10 @@ use `gemini-embedding-001` the same way. So "deploying" no longer means hosting
 a giant model — it means giving the small shell that *runs* her (API + web UI +
 memory) a public HTTPS address.
 
-> **Read the security section first.** Mira now has an access token
-> (`MIRA_ACCESS_TOKEN`). Without it, the API is wide open and *anyone who can
-> reach it can approve host commands* (arbitrary shell execution) and file
-> writes. Do not expose her to the internet without setting a token.
+> **Read the security section first.** Production deployments must use
+> magic-link email or Google OAuth — the shared `X-Mira-Token` model is now a
+> **local-dev fallback only**. Do not expose Mira to the internet without
+> proper auth. The minimum age for account creation is **18**.
 
 ---
 
@@ -121,16 +121,24 @@ AI_PROVIDER=gemini
 GEMINI_API_KEY=<your key>
 GEMINI_TEXT_MODEL=gemma-4-31b-it
 API_CORS_ORIGINS=https://mira.yourdomain.com    # your real public origin
-MIRA_ACCESS_TOKEN=<a long random secret>        # REQUIRED — see below
+# Auth — pick one (or both):
+GOOGLE_OAUTH_CLIENT_ID=<Google OAuth client id>
+GOOGLE_OAUTH_CLIENT_SECRET=<Google OAuth client secret>
+RESEND_API_KEY=<Resend API key for magic-link email>
+RESEND_FROM=noreply@yourdomain.com
+# Shared token — LOCAL DEV ONLY (fallback when no OAuth is configured):
+MIRA_ACCESS_TOKEN=<a long random secret>
 ```
 
-Generate the token:
+### Authentication
 
-```bash
-openssl rand -hex 32   # 64-character random secret
-```
+| Method | Environment | Notes |
+|---|---|---|
+| **Google OAuth** | Production | `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`. Redirect URI: `https://mira.yourdomain.com/auth/callback/google`. |
+| **Magic-link email** | Production | `RESEND_API_KEY` + `RESEND_FROM`. User receives a login link via email. |
+| **Shared token** | Local dev only | `MIRA_ACCESS_TOKEN`. Falls back to this when no OAuth provider is configured. **Do not use in production.** |
 
-**How the token works:**
+**Shared-token fallback (local dev):**
 
 - Empty token = auth disabled (fine for local dev, never for public deploy).
 - Set token = every REST request must carry `X-Mira-Token: <token>`, and every
@@ -256,12 +264,15 @@ third-party involvement in her thinking.
 
 ## Security checklist (mandatory before going public)
 
-- [ ] `MIRA_ACCESS_TOKEN` set to a long random value
+- [ ] `MIRA_ACCESS_TOKEN` set to a long random value (local dev only)
+- [ ] Google OAuth **or** magic-link email configured for production auth
+- [ ] `MINIMUM_AGE` is `18` (age gate enforced)
 - [ ] `GEMINI_API_KEY` set (brain won't answer otherwise)
 - [ ] `API_CORS_ORIGINS` matches your real public origin (`https://mira.mousebase.dev`)
+- [ ] Experimental features all **OFF** (`MIRA_EXPERIMENTAL_*: "false"`)
 - [ ] Nameservers switched to Cloudflare **and** zone shows **Active**
 - [ ] No inbound ports open (tunnel style) — HTTPS via Cloudflare edge
-- [ ] Token distributed only to people you want to call her
+- [ ] Token distributed only to people you want to call her (dev only)
 
 ---
 

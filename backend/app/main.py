@@ -21,6 +21,19 @@ from app.services.reminders.service import ReminderLoop
 setup_logging()
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Dual-mode loop lifecycle
+# ---------------------------------------------------------------------------
+# Single-process (default): the process-global loops below run in the same
+# event-loop as the API.  Works perfectly for SQLite / local dev.
+#
+# Worker mode (MIRA_WORKER_MODE=true): the same loops still start, but each
+# heartbeat enqueues a BackgroundJob instead of doing the work directly.  A
+# separate worker process (python -m app.worker) claims and executes those
+# jobs via SELECT FOR UPDATE SKIP LOCKED — safe for Postgres + multiple
+# workers.  This keeps the single-process path untouched while allowing
+# horizontal scaling when needed.
+# ---------------------------------------------------------------------------
 mind = MindLoop(get_provider())
 mote = MoteLoop()
 reminders = ReminderLoop()

@@ -15,6 +15,7 @@ from email.message import EmailMessage
 from urllib.parse import urlencode
 
 import httpx
+import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -81,24 +82,68 @@ class AuthService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    # -- JWT access tokens ---------------------------------------------------
+
+    def _jwt_secret(self) -> str:
+        settings = get_settings()
+        return settings.jwt_access_token_secret or settings.mira_access_token or "mira_access_token"
+
+    def create_access_token(self, user: User) -> str:
+        """Create a short-lived JWT access token for the given user."""
+        settings = get_settings()
+        secret = self._jwt_secret()
+        now = _now()
+        payload = {
+            "sub": user.id,
+            "exp": now + timedelta(minutes=settings.jwt_access_token_ttl_minutes),
+            "iat": now,
+            "type": "access",
+        }
+        return jwt.encode(payload, secret, algorithm="HS256")
+
+    def verify_access_token(self, token: str) -> User | None:
+        """Validate a JWT access token and return its user, or None."""
+        secret = self._jwt_secret()
+        try:
+            payload = jwt.decode(token, secret, algorithms=["HS256"])
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+            return None
+        if payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        return self.db.get(User, int(user_id))
+
     # -- sessions -----------------------------------------------------------
 
-    def create_session(self, user: User, *, user_agent: str | None = None) -> str:
-        token = _new_token()
+    def create_session(self, user: User, *, user_agent: str | None = None) -> tuple[str, str]:
+        """Create a session. Returns (access_token, refresh_token) where
+        access_token is a short-lived JWT and refresh_token is an opaque
+        DB-stored token."""
+        refresh_token = _new_token()
         ttl = timedelta(days=get_settings().session_ttl_days)
         self.db.add(
             UserSession(
                 user_id=user.id,
-                token_hash=_hash(token),
+                token_hash=_hash(refresh_token),
                 expires_at=_now() + ttl,
                 user_agent=(user_agent or "").strip()[:256] or None,
             )
         )
         self.db.commit()
-        return token
+        access_token = self.create_access_token(user)
+        return access_token, refresh_token
 
     def session_user(self, token: str) -> User | None:
-        """Resolve a bearer token to its user, or None if unknown/expired/revoked."""
+        """Resolve a bearer token to its user, or None if unknown/expired/revoked.
+        Accepts both JWT access tokens and opaque refresh tokens."""
+        # Try JWT first
+        if "." in token:
+            user = self.verify_access_token(token)
+            if user is not None:
+                return user
+        # Fall back to opaque DB-stored token
         row = self.db.execute(
             select(UserSession).where(UserSession.token_hash == _hash(token))
         ).scalar_one_or_none()
@@ -139,8 +184,8 @@ class AuthService:
             logger.warning("magic link for %s (SMTP unset, code shown in dev): %s", email, code)
         return code
 
-    def verify_magic_link(self, email: str, code: str) -> tuple[User, str] | None:
-        """Validate a code, sign the user in, and return (user, session token).
+    def verify_magic_link(self, email: str, code: str) -> tuple[User, str, str] | None:
+        """Validate a code, sign the user in, and return (user, access_token, refresh_token).
         One code, one use: consumed on the first successful exchange."""
         email = email.strip().lower()
         row = self.db.execute(
@@ -156,8 +201,8 @@ class AuthService:
         user = self._find_or_create_person(email=email)
         self.db.commit()
         self.db.refresh(user)
-        token = self.create_session(user)
-        return user, token
+        access_token, refresh_token = self.create_session(user)
+        return user, access_token, refresh_token
 
     # -- Google OAuth -------------------------------------------------------
 
@@ -187,8 +232,8 @@ class AuthService:
         }
         return f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
 
-    def google_callback(self, code: str, state: str, *, user_agent: str | None = None) -> tuple[User, str] | None:
-        """Complete the Google handshake. Returns (user, session token) or None."""
+    def google_callback(self, code: str, state: str, *, user_agent: str | None = None) -> tuple[User, str, str] | None:
+        """Complete the Google handshake. Returns (user, access_token, refresh_token) or None."""
         settings = get_settings()
         row = self.db.execute(
             select(OAuthState).where(
@@ -219,8 +264,8 @@ class AuthService:
             user.email = email
         self.db.commit()
         self.db.refresh(user)
-        token = self.create_session(user, user_agent=user_agent)
-        return user, token
+        access_token, refresh_token = self.create_session(user, user_agent=user_agent)
+        return user, access_token, refresh_token
 
     # -- helpers ------------------------------------------------------------
 

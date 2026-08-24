@@ -21,5 +21,6 @@ class UserOut(BaseModel):
 
 
 class AuthSuccess(BaseModel):
-    token: str
+    access_token: str
+    refresh_token: str
     user: UserOut

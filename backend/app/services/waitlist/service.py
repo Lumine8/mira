@@ -192,9 +192,9 @@ class WaitlistService:
 
         return send_invite_email(entry.email, code)
 
-    def join(self, email: str, code: str) -> tuple[User, str]:
+    def join(self, email: str, code: str) -> tuple[User, str, str]:
         """Redeem an invite: consume the code and sign the email's owner in.
-        Returns (user, session token)."""
+        Returns (user, access_token, refresh_token)."""
         email = email.strip().lower()
         entry = self._entry(email)
         if entry is None or entry.status != WAITLIST_INVITED or entry.invite_code is None:
@@ -209,8 +209,8 @@ class WaitlistService:
         user = auth._find_or_create_person(email=email)
         self.db.commit()
         self.db.refresh(user)
-        token = auth.create_session(user)
-        return user, token
+        access_token, refresh_token = auth.create_session(user)
+        return user, access_token, refresh_token
 
     # -- the first meeting ---------------------------------------------------
 
@@ -376,11 +376,11 @@ class WaitlistService:
             return "meeting"
         return "considering"
 
-    def admit(self, email: str, *, fingerprint: str, ip: str | None = None) -> tuple[User, str]:
+    def admit(self, email: str, *, fingerprint: str, ip: str | None = None) -> tuple[User, str, str]:
         """Open the door for an entry Mira decided to invite: the meeting is
         over, her decision was ``invited``, and the device that sat the meeting
         may step through — the address becomes a real account. Returns
-        (user, session token). A founder's manual code invite still goes
+        (user, access_token, refresh_token). A founder's manual code invite still goes
         through ``join``; this is only the door Mira herself opened."""
         email = email.strip().lower()
         entry = self._entry(email)
@@ -391,8 +391,8 @@ class WaitlistService:
         auth = AuthService(self.db)
         if entry.status == WAITLIST_JOINED:
             user = auth._find_or_create_person(email=email)
-            token = auth.create_session(user)
-            return user, token
+            access_token, refresh_token = auth.create_session(user)
+            return user, access_token, refresh_token
         if entry.status == WAITLIST_DECLINED:
             raise WaitlistError("this door has been closed")
         conv = (
@@ -410,8 +410,8 @@ class WaitlistService:
         user = auth._find_or_create_person(email=email)
         self.db.commit()
         self.db.refresh(user)
-        token = auth.create_session(user)
-        return user, token
+        access_token, refresh_token = auth.create_session(user)
+        return user, access_token, refresh_token
 
 
 _READ_MAX = 4000

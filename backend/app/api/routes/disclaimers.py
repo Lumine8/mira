@@ -1,5 +1,7 @@
 """Public endpoints for data disclosures and age verification."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +12,10 @@ from app.models import FOUNDER_ROLE, User
 from app.services.identity import get_current_user
 
 router = APIRouter(prefix="/disclaimers", tags=["disclaimers"])
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class AgeConfirmation(BaseModel):
@@ -50,8 +56,8 @@ def verify_age(
             status_code=403,
             detail=f"you must be at least {get_settings().minimum_age} to use Mira",
         )
-    # Store age verification in user metadata (using last_ip as a temporary
-    # storage — in production this would be a dedicated column)
-    user.last_ip = f"age_verified:{payload.age}"
+    user.age_verified = True
+    user.age_verified_at = _now()
+    user.age_verified_source = "self_declaration"
     db.commit()
     return {"ok": True, "age": payload.age}

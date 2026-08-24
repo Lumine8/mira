@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # must sign in again.
     session_ttl_days: int = 30
 
+    # JWT access token settings. The access token is a short-lived JWT (default
+    # 15 min) sent in Authorization headers. The refresh token is the existing
+    # opaque token stored in the DB (session_ttl_days). Falls back to
+    # mira_access_token when jwt_access_token_secret is empty.
+    jwt_access_token_secret: str = ""
+    jwt_access_token_ttl_minutes: int = 15
+
     # Phase 3 guest mode. When on, anonymous visitors may talk (capped per
     # device) without an account; the web app identifies them with a stable
     # client-side fingerprint sent as X-Guest-Id. When off (default, and the
@@ -409,9 +416,16 @@ class Settings(BaseSettings):
     experimental_x_posting: bool = False
     experimental_video: bool = False
 
+    # Worker mode: when true the mind/mote/reminder loops enqueue background jobs
+    # instead of running directly, and a separate worker process (python -m
+    # app.worker) claims and executes them.  Set MIRA_WORKER_MODE=true to
+    # activate — single-process SQLite mode leaves this false and runs everything
+    # in-process as before.
+    worker_mode: bool = False
+
     # Phase 4 age gate: new users must confirm age before first conversation
     age_gate_enabled: bool = True
-    minimum_age: int = 16
+    minimum_age: int = 18
 
     # Phase 4 data disclosures
     privacy_url: str = ""

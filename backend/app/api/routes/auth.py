@@ -64,8 +64,8 @@ def verify_magic_link(payload: MagicLinkVerify, db: Session = Depends(get_db)) -
     result = AuthService(db).verify_magic_link(payload.email, payload.code)
     if result is None:
         raise HTTPException(status_code=400, detail="invalid or expired sign-in code")
-    user, token = result
-    return AuthSuccess(token=token, user=_user_out(user))
+    user, access_token, refresh_token = result
+    return AuthSuccess(access_token=access_token, refresh_token=refresh_token, user=_user_out(user))
 
 
 @router.get("/google/authorize")
@@ -93,8 +93,8 @@ def google_callback(
     frontend = get_settings().frontend_url
     if result is None:
         return RedirectResponse(url=f"{frontend}/auth?error=signin")
-    _, token = result
-    return RedirectResponse(url=f"{frontend}/auth/callback?token={token}")
+    _, access_token, _ = result
+    return RedirectResponse(url=f"{frontend}/auth/callback?token={access_token}")
 
 
 @router.get("/me", response_model=UserOut)

@@ -79,11 +79,12 @@ def waitlist_join(payload: WaitlistJoin, db: Session = Depends(get_db)) -> AuthS
     """Redeem an invite code: consume it, create/activate the account, and hand
     back a session token — the joined user can now talk past the free cap."""
     try:
-        user, token = WaitlistService(db).join(payload.email, payload.code)
+        user, access_token, refresh_token = WaitlistService(db).join(payload.email, payload.code)
     except WaitlistError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AuthSuccess(
-        token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         user=UserOut(
             id=user.id,
             name=user.name,
@@ -186,7 +187,7 @@ def waitlist_meeting_admit(
     the address becomes a real account. A founder's manual code invite still
     goes through ``/waitlist/join``."""
     try:
-        user, token = WaitlistService(db).admit(
+        user, access_token, refresh_token = WaitlistService(db).admit(
             payload.email,
             fingerprint=x_guest_id,
             ip=client_ip(request),
@@ -194,7 +195,8 @@ def waitlist_meeting_admit(
     except WaitlistError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return AuthSuccess(
-        token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         user=UserOut(
             id=user.id,
             name=user.name,

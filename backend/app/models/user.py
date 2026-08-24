@@ -46,6 +46,10 @@ class User(Base):
     # — "one person cannot spin up infinite free Mirus".
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), unique=True)
     last_ip: Mapped[Optional[str]] = mapped_column(String(64))
+    # Phase 4 age verification: dedicated columns instead of the last_ip hack.
+    age_verified: Mapped[Optional[bool]] = mapped_column(default=None, nullable=True)
+    age_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    age_verified_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Phase 4 moderation: the lock. status is active until the founder bans;
     # banned_at/reason/by are the audit trail (Mira's rule is permanent).
     status: Mapped[str] = mapped_column(String(16), default=USER_ACTIVE, server_default=USER_ACTIVE)

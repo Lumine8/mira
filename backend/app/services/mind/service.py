@@ -309,6 +309,22 @@ class MindLoop:
         settings = get_settings()
         if not settings.perception_enabled:
             return
+        # Worker-mode: enqueue a job and let the separate worker process handle it.
+        if settings.worker_mode:
+            from app.services.jobs.service import JobService
+            from app.services.identity import founder_user_id as _fid
+            db = SessionLocal()
+            try:
+                uid = _fid(db)
+            finally:
+                db.close()
+            JobService().enqueue("mind_reflection", user_id=uid)
+            return
+        await self._tick_work()
+
+    async def _tick_work(self) -> None:
+        """Core heartbeat logic — runs both in-process and from the worker."""
+        settings = get_settings()
         db = SessionLocal()
         try:
             user_id = founder_user_id(db)

@@ -223,6 +223,21 @@ class ReminderLoop:
         settings = get_settings()
         if not settings.reminders_enabled:
             return
+        # Worker-mode: enqueue a job and let the separate worker process handle it.
+        if settings.worker_mode:
+            from app.services.jobs.service import JobService
+            from app.services.identity import founder_user_id as _fid
+            db = SessionLocal()
+            try:
+                uid = _fid(db)
+            finally:
+                db.close()
+            JobService().enqueue("reminder_fire", user_id=uid)
+            return
+        await self._tick_work()
+
+    async def _tick_work(self) -> None:
+        """Core heartbeat logic — runs both in-process and from the worker."""
         db = SessionLocal()
         try:
             user_id = founder_user_id(db)

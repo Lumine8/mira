@@ -25,7 +25,7 @@ Three separate processes:
 
 ```
 backend/
-  alembic/                  database migrations (0001 → 0005)
+  alembic/                  database migrations (0001 → 0026_audit_log)
   app/
     api/routes/             health · calls · history · mira · tools · ws
     core/                   settings (pydantic-settings)
@@ -108,6 +108,8 @@ Run automatically at API container start (`entrypoint.sh` → `alembic upgrade h
 | `0003_embedding_dim_768` | Embedding vector 384 → 768 (nomic-embed-text) |
 | `0004_mind_loop` | `perceived_events` + `pending_message` + `last_reflection_at` |
 | `0005_self_edit` | `pending_changes` |
+| … | Phase 2–5 tables (JWT sessions, age-gate, rate limits, audit log, …) |
+| `0026_audit_log` | **Current head** — full audit trail for user actions |
 
 ## Design principles
 
