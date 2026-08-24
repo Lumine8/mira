@@ -308,7 +308,7 @@ class Settings(BaseSettings):
     # The "forever awake" mind loop: periodically she receives raw observations
     # from the world and reflects on them herself, forming her own thoughts.
     perception_enabled: bool = True
-    mind_heartbeat_seconds: int = 300
+    mind_heartbeat_seconds: int = 600
     # Minimum gap between any two reflections, so she doesn't burn the CPU.
     mind_min_reflection_gap_seconds: int = 1800
     # If no new observations arrive, she still thinks this often, just to stay alive.
