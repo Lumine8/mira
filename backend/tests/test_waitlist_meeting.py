@@ -148,11 +148,11 @@ def test_admit_opens_door_mira_invited(db) -> None:
     entry.meeting_outcome = MEETING_INVITED
     db.commit()
 
-    user, token = WaitlistService(db).admit(
+    user, access_token, refresh_token = WaitlistService(db).admit(
         "visitor@example.com", fingerprint="fp-meet-1"
     )
     assert user is not None and user.email == "visitor@example.com"
-    assert token
+    assert access_token and refresh_token
     db.refresh(entry)
     assert entry.status == "joined"
     assert db.query(UserSession).count() == 1
