@@ -43,16 +43,19 @@ class UsageService:
         if user.role == FOUNDER_ROLE:
             return None
 
-        # Phase 6: try billing tier first
-        from app.services.billing import BillingService
-        billing = BillingService(self.db)
-        sub = billing.get_subscription(user.id)
-        if sub is not None:
-            caps = billing.get_caps(user.id)
-            tier_cap = caps.get("messages_per_day", -1)
-            if tier_cap == -1:
-                return None  # unlimited
-            return tier_cap
+        # Phase 6: try billing tier first (may not exist in test/legacy DBs)
+        try:
+            from app.services.billing import BillingService
+            billing = BillingService(self.db)
+            sub = billing.get_subscription(user.id)
+            if sub is not None:
+                caps = billing.get_caps(user.id)
+                tier_cap = caps.get("messages_per_day", -1)
+                if tier_cap == -1:
+                    return None  # unlimited
+                return tier_cap
+        except Exception:
+            pass  # subscriptions table may not exist yet
 
         # Legacy fallback for users without a subscription record
         settings = self._settings(user.id)
