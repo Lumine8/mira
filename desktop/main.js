@@ -477,7 +477,7 @@ if (!gotLock) {
 }
 
 app.on("window-all-closed", () => {
-  // Keep running in the tray — that's the point of the companion.
+  app.quit();
 });
 
 app.on("before-quit", () => {
