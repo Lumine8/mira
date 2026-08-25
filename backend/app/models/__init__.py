@@ -55,6 +55,7 @@ from app.models.x import XAuth
 
 __all__ = [
     "ALL_TIERS",
+    "AuditLog",
     "BackgroundJob",
     "Conversation",
     "ConversationImpression",
@@ -69,6 +70,7 @@ __all__ = [
     "JOB_FAILED",
     "JOB_PENDING",
     "JOB_RUNNING",
+    "MAGIC_LINK_TTL_SECONDS",
     "MagicLink",
     "Memory",
     "MemoryEmbedding",

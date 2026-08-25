@@ -34,7 +34,7 @@ def auth_callback(code: str, state: str, db: Session = Depends(get_db)) -> HTMLR
     try:
         result = TwitterService(db, user_id=get_current_user_id(db)).exchange_code(code, state)
     except XError as exc:
-        return _page(f"Mira couldn't connect to X", f"{exc}", failed=True)
+        return _page("Mira couldn't connect to X", f"{exc}", failed=True)
     name = result.get("username") or "your account"
     return _page(
         "Mira is connected to X",

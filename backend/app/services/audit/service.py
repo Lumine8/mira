@@ -1,7 +1,6 @@
 """Append-only audit trail for security-sensitive actions."""
 
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 

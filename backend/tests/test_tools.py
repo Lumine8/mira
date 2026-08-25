@@ -301,7 +301,6 @@ def test_watch_render_delivers_frames(tmp_path: pytest.TempPathFactory) -> None:
     into the conversation, and the record explains the honest framing."""
     import base64
 
-    from app.models import PendingChange
 
     inserted: list = []
 

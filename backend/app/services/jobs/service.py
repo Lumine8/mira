@@ -6,9 +6,8 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update, text
+from sqlalchemy import select, update
 
-from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models.job import (
     JOB_DONE,

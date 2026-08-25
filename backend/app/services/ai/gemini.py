@@ -53,7 +53,6 @@ def _prepare(messages: list[dict]) -> list[dict]:
             mime = "image/png"
             payload = image
             if match:
-                import base64
 
                 payload = match.group(1)
                 inner = image.split(",", 1)[0]

@@ -5,8 +5,6 @@ pipeline. The score feeds into the moderation queue, never auto-bans."""
 import logging
 import time
 import threading
-from collections import defaultdict
-from datetime import datetime, timezone
 
 logger = logging.getLogger("mira.abuse")
 

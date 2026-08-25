@@ -4,9 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import User
 from app.services.billing import BillingService
 from app.services.identity import get_current_user
 
@@ -68,22 +66,15 @@ def create_checkout(
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request) -> dict:
-    """Stripe webhook endpoint. Verifies signature when configured."""
-    payload = await request.json()
+    """Stripe webhook endpoint. Verifies signature against the raw request body
+    using HMAC-SHA256, as Stripe intends."""
+    raw_body = await request.body()
     sig = request.headers.get("stripe-signature")
-    settings = get_settings()
-
-    # Verify webhook signature if secret is configured
-    if settings.stripe_webhook_secret and sig:
-        import hashlib
-        import hmac
-        # Basic verification (in production, use stripe.Webhook.construct_event)
-        # For now, trust the payload if signature is present
 
     db = next(get_db())
     try:
         service = BillingService(db)
-        ok = service.handle_stripe_webhook(payload, sig)
+        ok = service.handle_stripe_webhook(raw_body, sig)
         return {"ok": ok}
     finally:
         db.close()

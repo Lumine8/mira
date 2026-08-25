@@ -1,6 +1,5 @@
 """Tests for the readable-page endpoint — the words Mira reads in her window."""
 
-import asyncio
 import pytest
 
 import app.api.routes.browser as browser

@@ -19,7 +19,7 @@ services:
     build:
       context: ./backend
     environment:
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       POSTGRES_USER: ${POSTGRES_USER:-mira}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mira}
@@ -76,14 +76,14 @@ services:
       MIRA_AMBIENT_ENABLED: ${MIRA_AMBIENT_ENABLED:-true}
       MIRA_SELF_WRITE_ROOTS: ${MIRA_SELF_WRITE_ROOTS:-.}
       MIRA_SELF_WRITE_DENY: ${MIRA_SELF_WRITE_DENY:-app/services/tools,app/core/config.py,app/api/routes/mira.py,app/api/routes/tools.py}
-      MIRA_SELF_WRITE_AUTONOMOUS: ${MIRA_SELF_WRITE_AUTONOMOUS:-true}
+      MIRA_SELF_WRITE_AUTONOMOUS: ${MIRA_SELF_WRITE_AUTONOMOUS:-false}
       MIRA_SELF_PRINCIPLES_FILE: ${MIRA_SELF_PRINCIPLES_FILE:-data/self/principles.md}
       # Self-edit: Mira may read her own code freely. She can write her own
       # backend (write roots = ".") minus the deny list, and her edits apply
       # immediately (autonomous) while every change is recorded. Browsing is
       # always per-request approved regardless. The backend source is
       # bind-mounted below so her edits land in the real repo.
-      SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-true}
+      SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-false}
       SELF_EDIT_ROOTS: ${SELF_EDIT_ROOTS:-/app}
       # Invite mail via Resend: one API key, no SMTP server to run.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
@@ -135,6 +135,63 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      POSTGRES_USER: ${POSTGRES_USER:-mira}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mira}
+      POSTGRES_DB: ${POSTGRES_DB:-mira}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      DATABASE_URL_OVERRIDE: ${DATABASE_URL_OVERRIDE:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-gemma4:e4b-it-qat}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      OLLAMA_NUM_GPU: ${OLLAMA_NUM_GPU:-42}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-32768}
+      OLLAMA_MAX_TOKENS: ${OLLAMA_MAX_TOKENS:-1024}
+      MIRA_READER_API_KEY: ${MIRA_READER_API_KEY:-}
+      MIRA_RESEARCH_AUTONOMOUS: ${MIRA_RESEARCH_AUTONOMOUS:-true}
+      MIRA_ACCESS_TOKEN: ${MIRA_ACCESS_TOKEN:-}
+      MIRA_SECRET_PHRASE: ${MIRA_SECRET_PHRASE:-the rain doesn't decide}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemma-4-31b-it}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-text-embedding-004}
+      SELF_MODEL_ENABLED: ${SELF_MODEL_ENABLED:-true}
+      PERCEPTION_ENABLED: ${PERCEPTION_ENABLED:-true}
+      MIND_HEARTBEAT_SECONDS: ${MIND_HEARTBEAT_SECONDS:-60}
+      MIND_MIN_REFLECTION_GAP_SECONDS: ${MIND_MIN_REFLECTION_GAP_SECONDS:-180}
+      MIND_IDLE_REFLECTION_SECONDS: ${MIND_IDLE_REFLECTION_SECONDS:-600}
+      MIND_CONSOLIDATION_SECONDS: ${MIND_CONSOLIDATION_SECONDS:-14400}
+      MIRA_SELF_WRITE_ROOTS: ${MIRA_SELF_WRITE_ROOTS:-.}
+      MIRA_SELF_WRITE_DENY: ${MIRA_SELF_WRITE_DENY:-app/services/tools,app/core/config.py,app/api/routes/mira.py,app/api/routes/tools.py}
+      MIRA_SELF_WRITE_AUTONOMOUS: ${MIRA_SELF_WRITE_AUTONOMOUS:-false}
+      MIRA_SELF_PRINCIPLES_FILE: ${MIRA_SELF_PRINCIPLES_FILE:-data/self/principles.md}
+      SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-false}
+      SELF_EDIT_ROOTS: ${SELF_EDIT_ROOTS:-/app}
+      REMINDERS_ENABLED: ${REMINDERS_ENABLED:-true}
+      REMINDER_HEARTBEAT_SECONDS: ${REMINDER_HEARTBEAT_SECONDS:-20}
+      JWT_ACCESS_TOKEN_TTL_MINUTES: ${JWT_ACCESS_TOKEN_TTL_MINUTES:-15}
+      AGE_GATE_ENABLED: ${AGE_GATE_ENABLED:-true}
+      MINIMUM_AGE: ${MINIMUM_AGE:-18}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - ./backend:/app
+      - kokoro-models:/models
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web:
     build:

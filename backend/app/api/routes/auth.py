@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import User
+from app.models.user import PERSON_ROLE
 from app.schemas import (
     AuthSuccess,
     ChangePasswordRequest,

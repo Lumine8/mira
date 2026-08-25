@@ -551,7 +551,7 @@ class ConversationManager:
                 logger.warning("x_read proposal failed: %s", exc)
         for match in _X_POST_RE.finditer(raw):
             text = match.group("text").strip()[:_X_MAX_POST]
-            reason = f"she wants to post on X"
+            reason = "she wants to post on X"
             if not text:
                 logger.warning("x_post proposal ignored (empty text)")
                 continue
@@ -835,7 +835,7 @@ class ConversationManager:
         ("searching the scientific literature for …", "thinking") so the UI can
         show what she is doing while she works.
         """
-        conversation = self.get(conversation_id)
+        self.get(conversation_id)
         history = self.recent_messages(conversation_id)
         self.db.add(
             Message(conversation_id=conversation_id, speaker="user", content=user_input, image=image, source=source)

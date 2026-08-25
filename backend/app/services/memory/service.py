@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import EMBEDDING_DIM, Memory, MemoryEmbedding
+from app.models import Memory, MemoryEmbedding
 from app.services.ai.base import AIProvider
 
 # Live dedup: if a memory is this similar to one we already have (embedding

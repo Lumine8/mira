@@ -7,12 +7,12 @@ import logging
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import select, func as sql_func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.billing import (
-    TIER_FREE, TIER_FOUNDING, TIER_CONTINUITY, ALL_TIERS, TIER_CAPS,
+    TIER_FREE, TIER_FOUNDING, TIER_CONTINUITY, TIER_CAPS,
     Subscription, UsageRecord,
 )
 from app.models.user import User
@@ -27,6 +27,8 @@ def _now() -> datetime:
 
 
 class BillingService:
+    _processed_events: set[str] = set()
+
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -159,15 +161,30 @@ class BillingService:
         resp.raise_for_status()
         return resp.json()["id"]
 
-    def handle_stripe_webhook(self, payload: dict, sig_header: str | None = None) -> bool:
-        """Process a Stripe webhook event with HMAC-SHA256 signature verification."""
+    def handle_stripe_webhook(self, raw_body: bytes, sig_header: str | None = None) -> bool:
+        """Process a Stripe webhook event with HMAC-SHA256 signature verification
+        against the exact raw request body Stripe signed."""
         settings = get_settings()
 
-        # Verify the webhook signature if a secret is configured
         if settings.stripe_webhook_secret and sig_header:
-            if not self._verify_stripe_signature(payload, sig_header, settings.stripe_webhook_secret):
+            if not self._verify_stripe_signature(raw_body, sig_header, settings.stripe_webhook_secret):
                 logger.warning("stripe webhook signature verification failed")
                 return False
+
+        try:
+            payload = json.loads(raw_body)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("stripe webhook: invalid JSON body")
+            return False
+
+        event_id = payload.get("id")
+        if event_id:
+            if event_id in self._processed_events:
+                logger.info("stripe webhook: duplicate event %s, skipping", event_id)
+                return True
+            self._processed_events.add(event_id)
+            if len(self._processed_events) > 10_000:
+                self._processed_events = set(list(self._processed_events)[-5_000:])
 
         event_type = payload.get("type", "")
         data = payload.get("data", {}).get("object", {})
@@ -184,10 +201,10 @@ class BillingService:
         logger.info("unhandled stripe event: %s", event_type)
         return True
 
-    def _verify_stripe_signature(self, payload: dict, sig_header: str, secret: str) -> bool:
-        """Verify Stripe webhook HMAC-SHA256 signature.
+    def _verify_stripe_signature(self, raw_body: bytes, sig_header: str, secret: str) -> bool:
+        """Verify Stripe webhook HMAC-SHA256 signature against the raw bytes.
 
-        The ``stripe-signature`` header format is ``t=timestamp&v1=signature``.
+        The ``stripe-signature`` header format is ``t=timestamp,v1=signature``.
         We reject timestamps older than 5 minutes to prevent replay attacks.
         """
         try:
@@ -197,18 +214,16 @@ class BillingService:
             if not timestamp or not provided_sig:
                 return False
 
-            # Replay protection: reject if timestamp is older than 5 minutes
             ts = int(timestamp)
             now = int(_now().timestamp())
             if abs(now - ts) > 300:
                 logger.warning("stripe webhook timestamp too old: %d", ts)
                 return False
 
-            # Compute expected signature
-            signed_payload = f"{timestamp}.{json.dumps(payload, separators=(",", ":"))}"
+            signed_payload = f"{timestamp}.".encode() + raw_body
             expected_sig = hmac.new(
                 secret.encode("utf-8"),
-                signed_payload.encode("utf-8"),
+                signed_payload,
                 hashlib.sha256,
             ).hexdigest()
 
@@ -292,9 +307,12 @@ class BillingService:
 
     def usage_summary(self, days: int = 30) -> dict:
         """Aggregate usage across all users for margin calculation."""
-        cutoff = _now().strftime("%Y-%m-%d")
-        # Simple: count all records
-        records = self.db.execute(select(UsageRecord)).scalars().all()
+        from datetime import timedelta
+
+        cutoff = _now() - timedelta(days=days)
+        records = self.db.execute(
+            select(UsageRecord).where(UsageRecord.created_at >= cutoff)
+        ).scalars().all()
         total_messages = sum(r.messages_sent for r in records)
         total_tokens = sum(r.inference_tokens for r in records)
         total_cost = sum(r.inference_cost_cents for r in records)

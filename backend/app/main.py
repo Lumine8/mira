@@ -64,13 +64,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         settings.ai_provider,
         settings.gemini_text_model if settings.ai_provider == "gemini" else settings.ollama_llm_model,
     )
-    if settings.perception_enabled:
+    if settings.perception_enabled and not settings.worker_mode:
         mind.start()
         logger.info("mind loop started (heartbeat=%ss)", settings.mind_heartbeat_seconds)
-    if settings.mote_enabled:
+    if settings.mote_enabled and not settings.worker_mode:
         mote.start()
         logger.info("mote started (heartbeat=%ss, quiet-after=%ss)", settings.mote_heartbeat_seconds, settings.mote_quiet_after_seconds)
-    if settings.reminders_enabled:
+    if settings.reminders_enabled and not settings.worker_mode:
         reminders.start()
         logger.info("reminders started (heartbeat=%ss)", settings.reminder_heartbeat_seconds)
     if settings.tts_enabled:

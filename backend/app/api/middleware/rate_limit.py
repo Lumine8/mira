@@ -5,7 +5,6 @@ a shared store."""
 import logging
 import time
 import threading
-from collections import defaultdict
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

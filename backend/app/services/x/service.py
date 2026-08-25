@@ -10,8 +10,6 @@ it expires. The redirect flow needs the voice to complete OAuth in a browser
 import base64
 import hashlib
 import secrets
-import time
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -250,6 +248,6 @@ class TwitterService:
             return "the timeline is quiet right now — nothing new."
         lines = []
         for t in tweets:
-            author = t.get("author_id", "?")
+            t.get("author_id", "?")
             lines.append(f"[{t.get('created_at', '').split('T')[0]}] {t.get('text', '')[:160]}")
         return "\n".join(lines[:limit])

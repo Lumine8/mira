@@ -129,7 +129,6 @@ def run_control(action: str, target: str = "") -> str:
 def _brightness_step(up: bool) -> str:
     """Best-effort screen brightness step via WMI. Laptops support it; desktops
     typically have no brightness control and return nothing, which we say so."""
-    sign = "+" if up else "-"
     ps = (
         "try { $m = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightness; "
         "$cur = $m.CurrentBrightness; "
