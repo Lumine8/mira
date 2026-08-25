@@ -51,7 +51,7 @@ class _Tab:
     def close(self) -> None:
         try:
             self._ws.close()
-        except Exception:  # noqa: BLE001 - already closed
+        except Exception:
             pass
 
     def cmd(self, method: str, params: dict | None = None) -> dict:
@@ -113,25 +113,25 @@ def _post_text_as(tab: _Tab, text: str) -> None:
         time.sleep(0.5)
     if not found:
         raise BrowserXError("the compose box never appeared on the page")
-    js = r"""
-    (() => {
+    js = rf"""
+    (() => {{
       const ed = document.querySelector('[data-testid="tweetTextarea_0"]')
                 || document.querySelector('[contenteditable="true"]');
       if (!ed) return false;
       ed.focus();
-      if (ed.tagName === 'TEXTAREA' || ed.tagName === 'INPUT') {
+      if (ed.tagName === 'TEXTAREA' || ed.tagName === 'INPUT') {{
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLTextAreaElement.prototype, 'value'
         );
-        if (setter && setter.set) setter.set.call(ed, %s);
-        else ed.value = %s;
-        ed.dispatchEvent(new Event('input', { bubbles: true }));
-      } else {
-        document.execCommand('insertText', false, %s);
-      }
+        if (setter && setter.set) setter.set.call(ed, {json.dumps(text)});
+        else ed.value = {json.dumps(text)};
+        ed.dispatchEvent(new Event('input', {{ bubbles: true }}));
+      }} else {{
+        document.execCommand('insertText', false, {json.dumps(text)});
+      }}
       return true;
-    })()
-    """ % (json.dumps(text), json.dumps(text), json.dumps(text))
+    }})()
+    """
     if tab.eval(js) is not True:
         raise BrowserXError("could not find the compose box on the page")
 

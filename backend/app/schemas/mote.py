@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -11,8 +10,8 @@ class MoteSharedTimeOut(BaseModel):
     kind: str
     mood: str
     energy: int
-    word: Optional[str] = None
-    note: Optional[str] = None
+    word: str | None = None
+    note: str | None = None
     at: datetime
 
 
@@ -21,6 +20,6 @@ class MotePresenceOut(BaseModel):
 
     mood: str
     energy: int
-    last_kind: Optional[str] = None
-    last_word: Optional[str] = None
-    last_at: Optional[datetime] = None
+    last_kind: str | None = None
+    last_word: str | None = None
+    last_at: datetime | None = None

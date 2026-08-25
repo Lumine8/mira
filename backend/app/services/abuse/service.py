@@ -3,8 +3,8 @@ detect patterns (rapid-fire messages, spam, harassment) without a full ML
 pipeline. The score feeds into the moderation queue, never auto-bans."""
 
 import logging
-import time
 import threading
+import time
 
 logger = logging.getLogger("mira.abuse")
 

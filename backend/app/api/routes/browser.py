@@ -1,10 +1,11 @@
+import asyncio
+
+import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
-import asyncio
-import httpx
 
 from app.services.identity import get_current_user_id
-from app.services.tools.service import _page_to_text, _backup_text
+from app.services.tools.service import _backup_text, _page_to_text
 
 router = APIRouter(tags=["mira"])
 
@@ -41,7 +42,7 @@ async def browse_readable(
             "content": backup
             or f"[error] {exc.response.status_code} for {url} — the site refused the reader; use the link above to open it yourself",
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         backup = await asyncio.to_thread(_backup_text, url)
         return {
             "url": url,

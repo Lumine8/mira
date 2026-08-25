@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.services.mote.service import last_activity, nudge_due, nudge_word
 
-_UTC = timezone.utc
+_UTC = UTC
 
 
 def test_last_activity_picks_the_most_recent() -> None:

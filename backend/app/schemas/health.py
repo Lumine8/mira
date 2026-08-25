@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -8,4 +7,4 @@ class HealthResponse(BaseModel):
     db: str
     ollama: str
     provider: str
-    ollama_model: Optional[str] = None
+    ollama_model: str | None = None

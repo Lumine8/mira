@@ -30,9 +30,9 @@ def test_transcribe_bundled_wav() -> None:
 
 @pytest.mark.skipif(not _MODEL_PRESENT, reason="sherpa whisper model not downloaded")
 def test_transcribe_silence_is_empty() -> None:
+    import io
     import struct
     import wave
-    import io
 
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:
@@ -45,9 +45,9 @@ def test_transcribe_silence_is_empty() -> None:
 
 @pytest.mark.skipif(not _MODEL_PRESENT, reason="sherpa whisper model not downloaded")
 def test_transcribe_rejects_multichannel() -> None:
+    import io
     import struct
     import wave
-    import io
 
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav:

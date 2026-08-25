@@ -11,7 +11,7 @@ that folder; there is no separate store to drift out of sync.
 import os
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -72,11 +72,11 @@ class DocumentService:
         try:
             mtime = os.path.getmtime(path)
         except OSError:
-            return datetime.now(timezone.utc).isoformat()
+            return datetime.now(UTC).isoformat()
         try:
-            return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+            return datetime.fromtimestamp(mtime, tz=UTC).isoformat()
         except (OverflowError, OSError, ValueError):
-            return datetime.now(timezone.utc).isoformat()
+            return datetime.now(UTC).isoformat()
 
     def list_documents(self) -> list[dict]:
         """Every paper in both folders, newest first, with a short preview so

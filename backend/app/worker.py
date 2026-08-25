@@ -43,8 +43,8 @@ def run():
 
 def _execute(job):
     if job.kind == "mind_reflection":
-        from app.services.mind.service import MindLoop
         from app.deps import get_provider
+        from app.services.mind.service import MindLoop
 
         loop = MindLoop(get_provider())
         asyncio.run(loop._tick_work())

@@ -71,7 +71,7 @@ def test_invite_and_join_round_trip(monkeypatch, db) -> None:
     assert entry.status == "invited"
     assert code and len(code) == 10
 
-    user, access_token, refresh_token = svc.join("someone@example.com", code.lower())
+    user, _access_token, refresh_token = svc.join("someone@example.com", code.lower())
     assert user.email == "someone@example.com"
     assert user.role == "person"
     assert AuthService(db).session_user(refresh_token).id == user.id
@@ -161,7 +161,7 @@ def test_begin_first_meeting_mints_guest_conversation(monkeypatch, db) -> None:
 
 
 def test_first_meeting_is_one_sitting(monkeypatch, db) -> None:
-    svc, entry = _seed_meeting(monkeypatch, db)
+    svc, _entry = _seed_meeting(monkeypatch, db)
     _, conv_a = svc.begin_first_meeting("door@example.com", fingerprint="dev-xyz")
     _, conv_b = svc.begin_first_meeting("door@example.com", fingerprint="dev-xyz")
     assert conv_a.id == conv_b.id
@@ -187,7 +187,7 @@ def test_end_first_meeting_closes_once(monkeypatch, db) -> None:
 
 
 def test_meeting_message_count(monkeypatch, db) -> None:
-    svc, entry = _seed_meeting(monkeypatch, db)
+    svc, _entry = _seed_meeting(monkeypatch, db)
     _, conv = svc.begin_first_meeting("door@example.com", fingerprint="dev-xyz")
     for _ in range(3):
         db.add(Message(conversation_id=conv.id, speaker="user", content="hello"))

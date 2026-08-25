@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func, text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,23 +35,23 @@ class MiraState(Base):
     mood: Mapped[str] = mapped_column(String(32), default="relaxed")
     emotion_intensities: Mapped[dict[str, float]] = mapped_column(JSONB_PORTABLE, default=dict)
     energy: Mapped[int] = mapped_column(Integer, default=70)
-    currently_reading: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    favorite_song: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    currently_reading: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    favorite_song: Mapped[str | None] = mapped_column(String(255), nullable=True)
     things_she_is_curious_about: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
-    last_conversation_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_conversation_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Her evolving answer to "what am I?" — updated after conversations by the digest.
-    self_understanding: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    self_understanding: Mapped[str | None] = mapped_column(Text, nullable=True)
     thoughts: Mapped[list[str]] = mapped_column(JSONB_PORTABLE, default=list)
     # A message she formed on her own (during background reflection) that she
     # would like to share with the user; surfaced via /mira/state and cleared
     # once the user has seen it.
-    pending_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # When she last reflected in the background (the mind loop). Used to pace
     # idle thoughts so she doesn't burn the CPU by thinking non-stop.
-    last_reflection_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reflection_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # When she last re-read her own accumulated record and revised her
     # self-understanding (the self-review / consolidation pass).
-    last_consolidation_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_consolidation_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
@@ -101,7 +101,7 @@ class MoodRecord(Base):
     mood: Mapped[str] = mapped_column(String(32))
     energy: Mapped[int] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(32), default="digest")
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -109,9 +109,9 @@ class SchedulerLog(Base):
     __tablename__ = "scheduler_log"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     activity: Mapped[str] = mapped_column(String(64))
-    result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -143,10 +143,10 @@ class PendingChange(Base):
     summary: Mapped[str] = mapped_column(Text)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB_PORTABLE, default=dict)
     status: Mapped[str] = mapped_column(String(16), default="pending")
-    result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivered: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class UserSettings(Base):
@@ -161,5 +161,5 @@ class UserSettings(Base):
     theme: Mapped[str] = mapped_column(String(16), default="dark")
     # Per-user message cap per UTC day; None = use the deployment default (the
     # free tier). This is the seam where paid tiers plug in.
-    message_cap_per_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    message_cap_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

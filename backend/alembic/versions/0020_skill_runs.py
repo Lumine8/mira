@@ -9,15 +9,16 @@ history so a skill can prove itself over time — one row per run, one per
 evaluation, with the scores and evidence the evaluator produced.
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0020_skill_runs"
-down_revision: Union[str, None] = "0019_first_meeting"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0019_first_meeting"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -40,7 +40,7 @@ def load_config() -> dict:
     if CONFIG_PATH.exists():
         try:
             cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
-        except Exception as exc:  # noqa: BLE001 - keep last good config on a typo
+        except Exception as exc:
             print(f"[eyes] config error ({exc}); using previous values")
     return cfg
 
@@ -110,7 +110,7 @@ async def run_once(sct: mss.mss, cfg: dict, last_text: str) -> tuple[str, bool]:
             region = sct.monitors[1]
         png = await capture_region_png(sct, region)
         text = await ocr_png(png)
-    except Exception as exc:  # noqa: BLE001 - a bad frame must not kill the loop
+    except Exception as exc:
         print(f"[eyes] capture/ocr error: {exc}")
         return last_text, False
 
@@ -143,7 +143,7 @@ def post_observation(cfg: dict, text: str) -> bool:
         resp.raise_for_status()
         print(f"[eyes] posted {len(text)} chars of change to Mira")
         return True
-    except Exception as exc:  # noqa: BLE001 - network blips should not kill us
+    except Exception as exc:
         print(f"[eyes] post failed: {exc}")
         return False
 

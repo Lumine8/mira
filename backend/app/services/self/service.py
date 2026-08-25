@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from collections import deque
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -103,7 +103,7 @@ _VERDICTS = {"liked", "mixed", "not_liked"}
 _MAX_IMPRESSION_MOMENTS = 8
 
 
-def extract_json(text: str) -> Optional[dict[str, Any]]:
+def extract_json(text: str) -> dict[str, Any] | None:
     """Leniently pull a JSON object out of a model reply."""
     if not text:
         return None
@@ -289,8 +289,8 @@ class SelfModelService:
             memories = []
 
         lines = [
-            "[A private note on how you've been feeling lately. Read it, then react "
-            "honestly — correct it if it's wrong. It is not an order.]",
+            ("[A private note on how you've been feeling lately. Read it, then react "
+            "honestly — correct it if it's wrong. It is not an order.]"),
             f"Mood: {st.mood} · Energy: {st.energy}/100",
         ]
         if st.self_understanding:

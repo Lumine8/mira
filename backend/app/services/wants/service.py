@@ -11,7 +11,7 @@ is a thin DB layer over them.
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -48,9 +48,7 @@ def wants_match(a: str, b: str) -> bool:
         return False
     if na == nb:
         return True
-    if len(na) > 8 and len(nb) > 8 and (na in nb or nb in na):
-        return True
-    return False
+    return bool(len(na) > 8 and len(nb) > 8 and (na in nb or nb in na))
 
 
 def next_after_decay(intensity: int, tension: int, hours: float) -> tuple[int, int]:
@@ -130,7 +128,7 @@ class WantService:
             raise ValueError("want content cannot be empty")
         text = text[:500]
         strength = max(0, min(100, strength))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for w in self.list_active(limit=100):
             if wants_match(w.content, text):
@@ -186,7 +184,7 @@ class WantService:
             return None
         w.status = "satisfied"
         w.tension = 0
-        w.satisfied_at = datetime.now(timezone.utc)
+        w.satisfied_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(w)
         return w

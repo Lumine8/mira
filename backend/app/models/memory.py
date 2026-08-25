@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,9 +26,9 @@ class Memory(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     type: Mapped[str] = mapped_column(String(32), default="fact")  # fact | episode | relationship_event
     content: Mapped[str] = mapped_column(Text)
-    valence: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # positive | negative | neutral
-    episode_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB_PORTABLE, nullable=True)
-    source_conversation_id: Mapped[Optional[int]] = mapped_column(
+    valence: Mapped[str | None] = mapped_column(String(16), nullable=True)  # positive | negative | neutral
+    episode_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB_PORTABLE, nullable=True)
+    source_conversation_id: Mapped[int | None] = mapped_column(
         ForeignKey("conversations.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -24,7 +24,7 @@ def db():
 class _EmbedProvider:
     async def embed(self, text: str) -> list[float]:
         # Cheap bag-of-words embedding so similarity is deterministic.
-        "mira rain evening window sky book".split()
+        ["mira", "rain", "evening", "window", "sky", "book"]
         import hashlib
 
         vec = [0.0] * 32

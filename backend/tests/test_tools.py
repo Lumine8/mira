@@ -1047,7 +1047,7 @@ def test_wikipedia_extract_falls_back_to_html(monkeypatch, tmp_path) -> None:
 
     tools_module.get_settings = lambda: FakeSettings()
 
-    def fake_stream(_client, method, url):  # noqa: ANN001, ANN202
+    def fake_stream(_client, method, url):
         raise RuntimeError("network off")
 
     monkeypatch.setattr("app.services.tools.service.httpx.Client", fake_stream)
@@ -1077,7 +1077,7 @@ def test_fetch_browse_falls_back_to_backup_reader(monkeypatch, tmp_path) -> None
 
     tools_module.get_settings = lambda: FakeSettings()
 
-    def fake_stream(_client, method, url):  # noqa: ANN001, ANN202
+    def fake_stream(_client, method, url):
         raise RuntimeError("refused by bot-wall")
 
     monkeypatch.setattr("app.services.tools.service.httpx.Client", fake_stream)

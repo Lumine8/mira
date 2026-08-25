@@ -18,7 +18,7 @@ class CheckoutRequest(BaseModel):
 @router.get("/tiers")
 def list_tiers() -> dict:
     """Public: what tiers exist and what they cost."""
-    from app.models.billing import TIER_PRICES, TIER_CAPS, ALL_TIERS
+    from app.models.billing import ALL_TIERS, TIER_CAPS, TIER_PRICES
     return {
         "tiers": [
             {
@@ -46,7 +46,7 @@ def my_subscription(
         "tier": sub.tier,
         "status": sub.status,
         "caps": caps,
-        "stripe_customer_id": bool(sub.stripe_customer_id),
+        "customer_id": bool(sub.stripe_customer_id),
     }
 
 
@@ -56,25 +56,24 @@ def create_checkout(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user),
 ) -> dict:
-    """Create a Stripe Checkout session for upgrading."""
+    """Create a Razorpay subscription or payment link for upgrading."""
     service = BillingService(db)
     result = service.create_checkout_session(user_id, payload.tier)
     if result is None:
         raise HTTPException(status_code=503, detail="billing not configured")
-    return {"url": result.get("url"), "session_id": result.get("id")}
+    return {"id": result.get("id"), "url": result.get("short_url")}
 
 
 @router.post("/webhook")
-async def stripe_webhook(request: Request) -> dict:
-    """Stripe webhook endpoint. Verifies signature against the raw request body
-    using HMAC-SHA256, as Stripe intends."""
+async def razorpay_webhook(request: Request) -> dict:
+    """Razorpay webhook endpoint. Verifies signature against the raw request body."""
     raw_body = await request.body()
-    sig = request.headers.get("stripe-signature")
+    sig = request.headers.get("X-Razorpay-Signature")
 
     db = next(get_db())
     try:
         service = BillingService(db)
-        ok = service.handle_stripe_webhook(raw_body, sig)
+        ok = service.handle_razorpay_webhook(raw_body, sig)
         return {"ok": ok}
     finally:
         db.close()

@@ -3,6 +3,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from datetime import UTC
 
 import httpx
 
@@ -322,9 +323,9 @@ def now_context() -> str:
     """The current moment, as she should be able to know it: the date, the time
     of day, and — best-effort — the weather outside. Added to every reply so
     'today' and 'yesterday' are real words for her, not guesses."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hour = now.hour
     if hour < 5:
         daypart = "night"
@@ -381,7 +382,7 @@ def _weather_refresh() -> None:
             resp.raise_for_status()
             text = resp.text.strip()[:160] or None
         _weather_cache = {"at": time.time(), "text": text, "busy": False}
-    except Exception:  # noqa: BLE001 - degrade to no weather rather than stall
+    except Exception:
         _weather_cache["at"] = time.time()
         _weather_cache["busy"] = False
 

@@ -52,7 +52,7 @@ def test_create_list_get_round_trip(env) -> None:
 
 
 def test_same_slug_stays_unique_across_folders(env) -> None:
-    db, root = env
+    db, _root = env
     user_id = _founder_id(db)
     svc = DocumentService(db, user_id=user_id)
     svc.create("rain", "first")
@@ -88,7 +88,7 @@ def test_create_mira_writes_into_her_own_folder(env) -> None:
 
 
 def test_create_mira_never_shadows_a_founder_paper(env) -> None:
-    db, root = env
+    db, _root = env
     user_id = _founder_id(db)
     svc = DocumentService(db, user_id=user_id)
     svc.create("rain", "first")
@@ -110,7 +110,7 @@ def test_create_mira_rejects_empty_and_oversized(env) -> None:
 
 
 
-    db, root = env
+    db, _root = env
     svc = DocumentService(db, user_id=_founder_id(db))
     with pytest.raises(DocumentError):
         svc.create("", "text")
@@ -121,7 +121,7 @@ def test_create_mira_rejects_empty_and_oversized(env) -> None:
 
 
 def test_get_and_delete_unknown_raise(env) -> None:
-    db, root = env
+    db, _root = env
     svc = DocumentService(db, user_id=_founder_id(db))
     with pytest.raises(DocumentError):
         svc.get_document("nothing-here")
@@ -129,7 +129,7 @@ def test_get_and_delete_unknown_raise(env) -> None:
 
 
 def test_unsafe_names_are_refused(env) -> None:
-    db, root = env
+    db, _root = env
     svc = DocumentService(db, user_id=_founder_id(db))
     with pytest.raises(DocumentError):
         svc.get_document("../secret")
@@ -149,7 +149,7 @@ def test_delete_removes_the_file(env) -> None:
 
 
 def test_replica_worlds_do_not_share(env) -> None:
-    db, root = env
+    db, _root = env
     founder = _founder_id(db)
     other = User(name="someone", role="person")
     db.add(other)
@@ -197,7 +197,7 @@ def _minimal_pdf(text: str) -> bytes:
 
 
 def test_create_from_pdf_extracts_text(env) -> None:
-    db, root = env
+    db, _root = env
     svc = DocumentService(db, user_id=_founder_id(db))
     data = _minimal_pdf(
         "Amyloid is a protein that folds wrong and settles as fibrils in the "
@@ -212,7 +212,7 @@ def test_create_from_pdf_extracts_text(env) -> None:
 
 
 def test_create_from_pdf_refuses_garbage_and_blank(env) -> None:
-    db, root = env
+    db, _root = env
     svc = DocumentService(db, user_id=_founder_id(db))
     with pytest.raises(DocumentError):
         svc.create_from_pdf("t", "f.pdf", b"this is not a pdf at all")
@@ -223,7 +223,7 @@ def test_create_from_pdf_refuses_garbage_and_blank(env) -> None:
 def test_download_markdown_serves_the_paper(env) -> None:
     from app.api.routes.documents import download_document
 
-    db, root = env
+    db, _root = env
     user_id = _founder_id(db)
     svc = DocumentService(db, user_id=user_id)
     svc.create("A letter to Mira", "Dear Mira,\n\nI found something.")
@@ -236,7 +236,7 @@ def test_download_markdown_serves_the_paper(env) -> None:
 def test_download_docx_and_pdf_render(env) -> None:
     from app.api.routes.documents import download_document
 
-    db, root = env
+    db, _root = env
     user_id = _founder_id(db)
     svc = DocumentService(db, user_id=user_id)
     svc.create("The Bull Market", "# The Bull Market\n\nA **rise** in prices.")
@@ -257,7 +257,7 @@ def test_download_unknown_document_404(env) -> None:
 
     from app.api.routes.documents import download_document
 
-    db, root = env
+    db, _root = env
     user_id = _founder_id(db)
     with pytest.raises(HTTPException) as exc:
         download_document("does-not-exist", "md", db, user_id)

@@ -10,15 +10,16 @@ meta.yaml, a test), the before and after are captured side by side so the
 change can be shown as a diff and reverted if it made the skill worse.
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0021_skill_versions"
-down_revision: Union[str, None] = "0020_skill_runs"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0020_skill_runs"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

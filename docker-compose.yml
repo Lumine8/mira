@@ -85,6 +85,7 @@ services:
       # bind-mounted below so her edits land in the real repo.
       SELF_EDIT_ENABLED: ${SELF_EDIT_ENABLED:-false}
       SELF_EDIT_ROOTS: ${SELF_EDIT_ROOTS:-/app}
+      MIRA_WORKER_MODE: ${MIRA_WORKER_MODE:-true}
       # Invite mail via Resend: one API key, no SMTP server to run.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
@@ -111,9 +112,12 @@ services:
       MIRA_EXPERIMENTAL_VIDEO: ${MIRA_EXPERIMENTAL_VIDEO:-false}
       # Phase 5: Rate limiting
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
-      # Phase 6: Billing (disabled until Stripe is configured)
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Phase 6: Billing via Razorpay (https://razorpay.me/)
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      RAZORPAY_FOUNDING_PLAN_ID: ${RAZORPAY_FOUNDING_PLAN_ID:-}
+      RAZORPAY_CONTINUITY_PLAN_ID: ${RAZORPAY_CONTINUITY_PLAN_ID:-}
     volumes:
       # Development only — bind-mount lets Mira's self-edits land in the real repo.
       # For production builds, remove this volume and use a baked-in COPY instead.
@@ -181,8 +185,11 @@ services:
       AGE_GATE_ENABLED: ${AGE_GATE_ENABLED:-true}
       MINIMUM_AGE: ${MINIMUM_AGE:-18}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      RAZORPAY_FOUNDING_PLAN_ID: ${RAZORPAY_FOUNDING_PLAN_ID:-}
+      RAZORPAY_CONTINUITY_PLAN_ID: ${RAZORPAY_CONTINUITY_PLAN_ID:-}
     volumes:
       - ./backend:/app
       - kokoro-models:/models

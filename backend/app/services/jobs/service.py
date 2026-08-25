@@ -4,7 +4,7 @@ after a timeout."""
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, update
 
@@ -23,7 +23,7 @@ _LOCK_TIMEOUT_MINUTES = 10
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class JobService:

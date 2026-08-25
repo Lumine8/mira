@@ -109,7 +109,7 @@ def run_command(command: str) -> tuple[int, str]:
         return proc.returncode, combined
     except subprocess.TimeoutExpired:
         return 124, f"(timed out after {TIMEOUT_SECONDS}s)"
-    except Exception as exc:  # noqa: BLE001 - agent must keep polling
+    except Exception as exc:
         return 1, f"(failed to run: {exc})"
 
 
@@ -137,7 +137,7 @@ def read_file(path: str) -> str:
         return f"(no such file: {path})"
     except IsADirectoryError:
         return f"(that is a directory, not a file: {path})"
-    except Exception as exc:  # noqa: BLE001 - agent must keep polling
+    except Exception as exc:
         return f"(could not read: {exc})"
 
 
@@ -153,7 +153,7 @@ def report_result(base: str, change: dict, note: str, prefix: str = "") -> None:
         )
         r.raise_for_status()
         print(f"[agent] reported #{cid} back{prefix}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[agent] failed to report #{cid}: {exc}")
         log_entry("ERR", f"#{cid}: report failed: {exc}")
 
@@ -177,7 +177,7 @@ def main() -> None:
             resp = requests.get(pending_url, headers=headers(), timeout=10)
             resp.raise_for_status()
             pending = resp.json()
-        except Exception as exc:  # noqa: BLE001 - API may be briefly down
+        except Exception as exc:
             print(f"[agent] poll failed: {exc}")
             if args.once:
                 sys.exit(1)

@@ -13,7 +13,7 @@ layer over them.
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -44,9 +44,7 @@ def questions_match(a: str, b: str) -> bool:
         return False
     if na == nb:
         return True
-    if len(na) > _MERGE_LEN and len(nb) > _MERGE_LEN and (na in nb or nb in na):
-        return True
-    return False
+    return bool(len(na) > _MERGE_LEN and len(nb) > _MERGE_LEN and (na in nb or nb in na))
 
 
 def next_after_simmer(importance: int, hours: float) -> int:
@@ -125,7 +123,7 @@ class QuestionService:
         text = text[:500]
         importance = max(0, min(100, importance))
         origin = (origin or "").strip()[:512] or None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for q in self.list_open(limit=100):
             if questions_match(q.question, text):
@@ -195,8 +193,8 @@ class QuestionService:
         if q is None:
             return None
         q.status = "asked"
-        q.asked_at = datetime.now(timezone.utc)
-        q.last_revisited = datetime.now(timezone.utc)
+        q.asked_at = datetime.now(UTC)
+        q.last_revisited = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(q)
         return q
@@ -209,7 +207,7 @@ class QuestionService:
         if q is None:
             return None
         q.status = "answered"
-        q.answered_at = datetime.now(timezone.utc)
+        q.answered_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(q)
         return q

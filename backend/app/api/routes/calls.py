@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.deps import get_provider
 from app.db.session import get_db
+from app.deps import get_provider
 from app.models import Conversation
 from app.schemas import CallStartRequest, CallStartResponse, SpeakRequest
 from app.services.ai.base import AIProvider

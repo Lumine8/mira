@@ -15,7 +15,7 @@ import asyncio
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -93,7 +93,7 @@ def _hash(value: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class WaitlistError(Exception):

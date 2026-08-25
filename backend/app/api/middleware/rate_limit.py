@@ -3,8 +3,8 @@ Lightweight: no Redis required. For multi-process deployments, swap to
 a shared store."""
 
 import logging
-import time
 import threading
+import time
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

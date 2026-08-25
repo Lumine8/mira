@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.services.mind.service import _weather_condition, build_observations
 
@@ -11,7 +11,7 @@ class FakeEvent:
 
 
 def test_observations_include_time_texture() -> None:
-    now = datetime(2026, 8, 2, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 2, 14, 30, tzinfo=UTC)
     text = build_observations(now, [], None, None)
     assert "Sunday, August 02" in text
     assert "afternoon" in text
@@ -20,20 +20,20 @@ def test_observations_include_time_texture() -> None:
 
 
 def test_observations_include_weather_when_given() -> None:
-    now = datetime(2026, 8, 2, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 2, 14, 30, tzinfo=UTC)
     text = build_observations(now, [], None, None, weather="Overcast, +17°C")
     assert "The weather outside is: Overcast, +17°C." in text
 
 
 def test_observations_note_user_silence() -> None:
-    now = datetime(2026, 8, 2, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 2, 14, 30, tzinfo=UTC)
     last = now - timedelta(hours=3)
     text = build_observations(now, [], last, None)
     assert "away for about 3.0 hours" in text
 
 
 def test_observations_include_perceived_events() -> None:
-    now = datetime(2026, 8, 2, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 2, 14, 30, tzinfo=UTC)
     events = [FakeEvent("host", "machine", "the machine has been idle for 2 hours")]
     text = build_observations(now, events, None, None)
     assert "(host: machine) the machine has been idle for 2 hours" in text

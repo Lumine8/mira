@@ -8,8 +8,8 @@ Run inside the api container:
     docker exec -i mira-api-1 python - < backend/scripts/merge_rain_memories.py
 """
 
-import re
 import os
+import re
 import sys
 from difflib import SequenceMatcher
 

@@ -1,10 +1,10 @@
-"""Billing service: tier management, Stripe integration, usage tracking."""
+"""Billing service: tier management, Razorpay integration, usage tracking."""
 
 import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import select
@@ -12,18 +12,22 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.billing import (
-    TIER_FREE, TIER_FOUNDING, TIER_CONTINUITY, TIER_CAPS,
-    Subscription, UsageRecord,
+    TIER_CAPS,
+    TIER_CONTINUITY,
+    TIER_FOUNDING,
+    TIER_FREE,
+    Subscription,
+    UsageRecord,
 )
 from app.models.user import User
 
 logger = logging.getLogger("mira.billing")
 
-_STRIPE_API = "https://api.stripe.com/v1"
+_RAZORPAY_API = "https://api.razorpay.com/v1"
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class BillingService:
@@ -64,7 +68,7 @@ class BillingService:
         """Check if user can send a message. Returns (allowed, cap, used)."""
         caps = self.get_caps(user_id)
         cap = caps["messages_per_day"]
-        if cap == -1:  # unlimited
+        if cap == -1:
             return True, -1, 0
         used = self._messages_today(user_id)
         return used < cap, cap, used
@@ -95,215 +99,185 @@ class BillingService:
         record.inference_cost_cents += cost_cents
         self.db.commit()
 
-    # --- Stripe integration ---
+    # --- Razorpay integration (https://razorpay.me/) ---
+
+    def _razorpay_auth(self) -> tuple[str, str]:
+        settings = get_settings()
+        return (settings.razorpay_key_id, settings.razorpay_key_secret)
 
     def create_checkout_session(self, user_id: int, tier: str) -> dict | None:
-        """Create a Stripe Checkout session for upgrading to a paid tier."""
+        """Create a Razorpay subscription or one-time payment link."""
         settings = get_settings()
-        if not settings.stripe_secret_key:
-            logger.warning("Stripe not configured, cannot create checkout session")
+        if not settings.razorpay_key_id:
+            logger.warning("Razorpay not configured, cannot create checkout session")
             return None
 
-        price_map = {
-            TIER_FOUNDING: settings.stripe_founding_price_id,
-            TIER_CONTINUITY: settings.stripe_continuity_price_id,
+        plan_map = {
+            TIER_FOUNDING: settings.razorpay_founding_plan_id,
+            TIER_CONTINUITY: settings.razorpay_continuity_plan_id,
         }
-        price_id = price_map.get(tier)
-        if not price_id:
+        plan_id = plan_map.get(tier)
+        if not plan_id:
             return None
 
         user = self.db.get(User, user_id)
         if user is None:
             return None
 
-        # Get or create Stripe customer
         sub = self.get_or_create_subscription(user_id)
-        customer_id = sub.stripe_customer_id
+        customer_id = sub.stripe_customer_id  # reuse field for razorpay_customer_id
         if not customer_id:
-            customer_id = self._create_stripe_customer(user)
+            customer_id = self._create_razorpay_customer(user)
             sub.stripe_customer_id = customer_id
             self.db.commit()
 
         try:
             resp = httpx.post(
-                f"{_STRIPE_API}/checkout/sessions",
-                auth=("sk_live_" + settings.stripe_secret_key if not settings.stripe_secret_key.startswith("sk_") else settings.stripe_secret_key, ""),
-                data={
-                    "customer": customer_id,
-                    "mode": "subscription" if tier == TIER_CONTINUITY else "payment",
-                    "line_items[0][price]": price_id,
-                    "line_items[0][quantity]": 1,
-                    "success_url": f"{settings.frontend_url}/auth?upgraded={tier}",
-                    "cancel_url": f"{settings.frontend_url}/auth?cancelled=1",
-                    "metadata[user_id]": str(user_id),
-                    "metadata[tier]": tier,
+                f"{_RAZORPAY_API}/subscriptions",
+                auth=self._razorpay_auth(),
+                json={
+                    "plan_id": plan_id,
+                    "customer_id": customer_id,
+                    "total_count": 0 if tier == TIER_CONTINUITY else 1,
+                    "notes": {"user_id": str(user_id), "tier": tier},
                 },
                 timeout=15,
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            return {"id": data.get("id"), "short_url": data.get("short_url")}
         except Exception as exc:
-            logger.warning("stripe checkout failed: %s", exc)
+            logger.warning("razorpay subscription failed: %s", exc)
             return None
 
-    def _create_stripe_customer(self, user: User) -> str:
-        settings = get_settings()
+    def _create_razorpay_customer(self, user: User) -> str:
+        get_settings()
         resp = httpx.post(
-            f"{_STRIPE_API}/customers",
-            auth=(settings.stripe_secret_key, ""),
-            data={
+            f"{_RAZORPAY_API}/customers",
+            auth=self._razorpay_auth(),
+            json={
                 "email": user.email or "",
                 "name": user.name,
-                "metadata[user_id]": str(user.id),
+                "notes": {"user_id": str(user.id)},
             },
             timeout=15,
         )
         resp.raise_for_status()
         return resp.json()["id"]
 
-    def handle_stripe_webhook(self, raw_body: bytes, sig_header: str | None = None) -> bool:
-        """Process a Stripe webhook event with HMAC-SHA256 signature verification
-        against the exact raw request body Stripe signed."""
+    def handle_razorpay_webhook(self, raw_body: bytes, sig_header: str | None = None) -> bool:
+        """Process a Razorpay webhook event with HMAC-SHA256 signature verification."""
         settings = get_settings()
 
-        if settings.stripe_webhook_secret and sig_header:
-            if not self._verify_stripe_signature(raw_body, sig_header, settings.stripe_webhook_secret):
-                logger.warning("stripe webhook signature verification failed")
+        if settings.razorpay_webhook_secret and sig_header:
+            if not self._verify_razorpay_signature(raw_body, sig_header, settings.razorpay_webhook_secret):
+                logger.warning("razorpay webhook signature verification failed")
                 return False
 
         try:
             payload = json.loads(raw_body)
         except (json.JSONDecodeError, ValueError):
-            logger.warning("stripe webhook: invalid JSON body")
+            logger.warning("razorpay webhook: invalid JSON body")
             return False
 
         event_id = payload.get("id")
         if event_id:
             if event_id in self._processed_events:
-                logger.info("stripe webhook: duplicate event %s, skipping", event_id)
+                logger.info("razorpay webhook: duplicate event %s, skipping", event_id)
                 return True
             self._processed_events.add(event_id)
             if len(self._processed_events) > 10_000:
                 self._processed_events = set(list(self._processed_events)[-5_000:])
 
-        event_type = payload.get("type", "")
-        data = payload.get("data", {}).get("object", {})
+        event = payload.get("event", "")
+        payload_data = payload.get("payload", {})
 
-        if event_type == "checkout.session.completed":
-            return self._handle_checkout_completed(data)
-        elif event_type == "invoice.paid":
-            return self._handle_invoice_paid(data)
-        elif event_type == "customer.subscription.deleted":
-            return self._handle_subscription_deleted(data)
-        elif event_type == "customer.subscription.updated":
-            return self._handle_subscription_updated(data)
+        if event == "subscription.activated":
+            return self._handle_subscription_activated(payload_data)
+        elif event == "subscription.charged":
+            return self._handle_subscription_charged(payload_data)
+        elif event == "subscription.cancelled":
+            return self._handle_subscription_cancelled(payload_data)
+        elif event == "subscription.paused":
+            return self._handle_subscription_paused(payload_data)
 
-        logger.info("unhandled stripe event: %s", event_type)
+        logger.info("unhandled razorpay event: %s", event)
         return True
 
-    def _verify_stripe_signature(self, raw_body: bytes, sig_header: str, secret: str) -> bool:
-        """Verify Stripe webhook HMAC-SHA256 signature against the raw bytes.
+    def _verify_razorpay_signature(self, raw_body: bytes, sig_header: str, secret: str) -> bool:
+        """Verify Razorpay webhook HMAC-SHA256 signature against the raw bytes.
 
-        The ``stripe-signature`` header format is ``t=timestamp,v1=signature``.
-        We reject timestamps older than 5 minutes to prevent replay attacks.
+        Razorpay sends ``X-Razorpay-Signature`` as a hex digest of
+        HMAC-SHA256(secret, raw_body).
         """
         try:
-            parts = dict(item.split("=", 1) for item in sig_header.split(","))
-            timestamp = parts.get("t", "")
-            provided_sig = parts.get("v1", "")
-            if not timestamp or not provided_sig:
-                return False
-
-            ts = int(timestamp)
-            now = int(_now().timestamp())
-            if abs(now - ts) > 300:
-                logger.warning("stripe webhook timestamp too old: %d", ts)
-                return False
-
-            signed_payload = f"{timestamp}.".encode() + raw_body
-            expected_sig = hmac.new(
+            expected = hmac.new(
                 secret.encode("utf-8"),
-                signed_payload,
+                raw_body,
                 hashlib.sha256,
             ).hexdigest()
-
-            return hmac.compare_digest(expected_sig, provided_sig)
+            return hmac.compare_digest(expected, sig_header)
         except Exception as exc:
-            logger.warning("stripe webhook signature check error: %s", exc)
+            logger.warning("razorpay signature check error: %s", exc)
             return False
 
-    def _handle_checkout_completed(self, data: dict) -> bool:
-        user_id = int(data.get("metadata", {}).get("user_id", 0))
-        tier = data.get("metadata", {}).get("tier", TIER_FREE)
-        sub_id = data.get("subscription")
-        customer = data.get("customer")
-
+    def _handle_subscription_activated(self, data: dict) -> bool:
+        sub_data = data.get("subscription", {}).get("entity", {})
+        notes = sub_data.get("notes", {})
+        user_id = int(notes.get("user_id", 0))
+        tier = notes.get("tier", TIER_FREE)
         if not user_id:
             return False
-
         sub = self.get_or_create_subscription(user_id)
         sub.tier = tier
-        if customer:
-            sub.stripe_customer_id = customer
-        if sub_id:
-            sub.stripe_subscription_id = sub_id
-            sub.status = "active"
-        self.db.commit()
-        logger.info("user %d upgraded to %s", user_id, tier)
-        return True
-
-    def _handle_invoice_paid(self, data: dict) -> bool:
-        customer = data.get("customer")
-        if not customer:
-            return False
-        sub = self.db.execute(
-            select(Subscription).where(Subscription.stripe_customer_id == customer)
-        ).scalar_one_or_none()
-        if sub is None:
-            return False
         sub.status = "active"
-        period_start = data.get("period_start")
-        period_end = data.get("period_end")
-        if period_start:
-            sub.current_period_start = datetime.fromtimestamp(period_start, tz=timezone.utc)
-        if period_end:
-            sub.current_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
+        sub.stripe_subscription_id = sub_data.get("id", "")
         self.db.commit()
+        logger.info("user %d subscription activated (%s)", user_id, tier)
         return True
 
-    def _handle_subscription_deleted(self, data: dict) -> bool:
-        sub_id = data.get("id")
-        if not sub_id:
+    def _handle_subscription_charged(self, data: dict) -> bool:
+        payment = data.get("payment", {}).get("entity", {})
+        subscription_id = payment.get("subscription_id", "")
+        if not subscription_id:
             return False
         sub = self.db.execute(
-            select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
+            select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
         ).scalar_one_or_none()
-        if sub is None:
-            return False
-        sub.tier = TIER_FREE
-        sub.stripe_subscription_id = None
-        sub.stripe_price_id = None
-        sub.status = "canceled"
-        self.db.commit()
-        logger.info("user %d downgraded to free", sub.user_id)
+        if sub:
+            sub.status = "active"
+            self.db.commit()
+            logger.info("subscription %s charged successfully", subscription_id)
         return True
 
-    def _handle_subscription_updated(self, data: dict) -> bool:
-        sub_id = data.get("id")
-        status = data.get("status")
-        if not sub_id:
+    def _handle_subscription_cancelled(self, data: dict) -> bool:
+        sub_data = data.get("subscription", {}).get("entity", {})
+        subscription_id = sub_data.get("id", "")
+        if not subscription_id:
             return False
         sub = self.db.execute(
-            select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
+            select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
         ).scalar_one_or_none()
-        if sub is None:
-            return False
-        if status:
-            sub.status = status
-        self.db.commit()
+        if sub:
+            sub.status = "cancelled"
+            sub.tier = TIER_FREE
+            self.db.commit()
+            logger.info("subscription %s cancelled", subscription_id)
         return True
 
-    # --- Margin tracking ---
+    def _handle_subscription_paused(self, data: dict) -> bool:
+        sub_data = data.get("subscription", {}).get("entity", {})
+        subscription_id = sub_data.get("id", "")
+        if not subscription_id:
+            return False
+        sub = self.db.execute(
+            select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
+        ).scalar_one_or_none()
+        if sub:
+            sub.status = "paused"
+            self.db.commit()
+            logger.info("subscription %s paused", subscription_id)
+        return True
 
     def usage_summary(self, days: int = 30) -> dict:
         """Aggregate usage across all users for margin calculation."""

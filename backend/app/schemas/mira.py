@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,13 +6,13 @@ from pydantic import BaseModel, Field
 class MiraStateOut(BaseModel):
     mood: str
     energy: int
-    self_understanding: Optional[str] = None
+    self_understanding: str | None = None
     things_she_is_curious_about: list[str] = []
-    last_conversation_summary: Optional[str] = None
-    pending_message: Optional[str] = None
-    pending_message_conversation_id: Optional[int] = None
+    last_conversation_summary: str | None = None
+    pending_message: str | None = None
+    pending_message_conversation_id: int | None = None
     carried_thoughts: list[str] = Field(default_factory=list)
-    last_reflection_at: Optional[datetime] = None
+    last_reflection_at: datetime | None = None
     updated_at: datetime
     # The word that summons her in always-listening mode ("" = no wake word).
     wake_word: str = ""
@@ -37,8 +36,8 @@ class MemoryOut(BaseModel):
     id: int
     type: str
     content: str
-    valence: Optional[str] = None
-    source_conversation_id: Optional[int] = None
+    valence: str | None = None
+    source_conversation_id: int | None = None
     created_at: datetime
 
 
@@ -72,7 +71,7 @@ class PendingChangeOut(BaseModel):
     summary: str
     payload: dict
     status: str
-    result: Optional[str] = None
+    result: str | None = None
     created_at: datetime
 
 
@@ -86,7 +85,7 @@ class WantOut(BaseModel):
     intensity: int
     tension: int
     status: str
-    related_conversation_id: Optional[int] = None
+    related_conversation_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -98,13 +97,13 @@ class QuestionOut(BaseModel):
     id: int
     question: str
     source: str
-    origin: Optional[str] = None
+    origin: str | None = None
     importance: int
     status: str
-    related_conversation_id: Optional[int] = None
-    asked_at: Optional[datetime] = None
-    answered_at: Optional[datetime] = None
-    last_revisited: Optional[datetime] = None
+    related_conversation_id: int | None = None
+    asked_at: datetime | None = None
+    answered_at: datetime | None = None
+    last_revisited: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -116,5 +115,5 @@ class MoodRecordOut(BaseModel):
     mood: str
     energy: int
     source: str
-    note: Optional[str] = None
+    note: str | None = None
     created_at: datetime

@@ -11,8 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.services.documents import DocumentError, DocumentService
-from app.services.documents import export
+from app.services.documents import DocumentError, DocumentService, export
 from app.services.identity import get_current_user_id
 
 router = APIRouter(prefix="/mira/documents", tags=["mira"])
@@ -98,7 +97,7 @@ def download_document(
             body = export.docx_bytes(doc["content"])
         else:
             body = export.pdf_bytes(doc["content"])
-    except Exception as exc:  # noqa: BLE001 - a bad export must not break the download
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=f"could not render {format}: {exc}") from exc
     filename = f"{doc['name']}.{extension}"
     return Response(

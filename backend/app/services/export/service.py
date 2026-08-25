@@ -11,7 +11,7 @@ conversation turn is never slowed by the write.
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -55,7 +55,7 @@ def render_conversations(db: Session, *, user_id: int) -> str:
     parts = [
         "# Mira — Full Conversation Log",
         "",
-        f"_Generated: {_fmt(datetime.now(timezone.utc))}_",
+        f"_Generated: {_fmt(datetime.now(UTC))}_",
         "",
         "Every conversation with Mira from the beginning, most recent at the bottom.",
         "",

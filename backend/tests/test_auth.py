@@ -1,6 +1,6 @@
 import pytest
 
-import app.deps as deps
+from app import deps
 
 
 class _TokenSettings:

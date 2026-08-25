@@ -35,7 +35,7 @@ def format_ago(iso: str | None) -> str:
     if not iso:
         return ""
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(iso)
         delta = datetime.now(dt.tzinfo) - dt
         secs = int(delta.total_seconds())
         if secs < 60:
@@ -111,7 +111,7 @@ class MiraWidget:
                 self.msg_label.configure(text="…")
 
             self.ago_label.configure(text=format_ago(state.get("updated_at")))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self.mood_label.configure(text="offline")
             self.ago_label.configure(text=str(exc)[:40])
         self.root.after(POLL_MS, self.poll)

@@ -55,5 +55,5 @@ def test_inline_splits_bold_italic_and_link() -> None:
     segs = export._inline("A **bold** and *it* with [link](https://x.y)")
     kinds = [k for k, _ in segs]
     assert kinds == ["text", "bold", "text", "italic", "text", "link"]
-    link = [v for k, v in segs if k == "link"][0]
+    link = next(v for k, v in segs if k == "link")
     assert link == ("link", "https://x.y")

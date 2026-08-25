@@ -286,11 +286,12 @@ class Settings(BaseSettings):
     mira_money_deny_domains: str = ""
     mira_money_deny_commands: str = ""
 
-    # Stripe billing
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
-    stripe_founding_price_id: str = ""
-    stripe_continuity_price_id: str = ""
+    # Razorpay billing (https://razorpay.me/)
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
+    razorpay_founding_plan_id: str = ""
+    razorpay_continuity_plan_id: str = ""
 
     # X (Twitter): user-context OAuth 2.0 + PKCE. When configured, Mira can
     # propose reading her timeline or posting through the usual approve-gate.

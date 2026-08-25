@@ -42,6 +42,21 @@ reminders = ReminderLoop()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+
+    if settings.environment == "production":
+        missing = []
+        if not settings.jwt_access_token_secret or len(settings.jwt_access_token_secret) < 32:
+            missing.append("JWT_ACCESS_TOKEN_TTL_MINUTES secret (must be >= 32 chars)")
+        if not settings.database_url and not settings.is_sqlite:
+            missing.append("DATABASE_URL_OVERRIDE (Postgres connection string)")
+        if settings.ai_provider == "gemini" and not settings.gemini_api_key:
+            missing.append("GEMINI_API_KEY")
+        if settings.ai_provider == "ollama" and not settings.ollama_host:
+            missing.append("OLLAMA_HOST")
+        if missing:
+            logger.critical("production startup aborted — missing: %s", ", ".join(missing))
+            raise SystemExit(f"missing required production config: {', '.join(missing)}")
+
     try:
         if settings.is_sqlite:
             # The native no-Docker setup: sqlite has no alembic migration chain
@@ -142,14 +157,15 @@ def create_app() -> FastAPI:
     # Native single-port mode: serve the built web app from this process so
     # there is no separate web container. The SPA's deep links fall back to
     # index.html; unknown /api paths stay 404s rather than returning the page.
-    from fastapi.responses import FileResponse, JSONResponse, Response
     from pathlib import Path
+
+    from fastapi.responses import FileResponse, JSONResponse, Response
 
     static_dir = Path(os.environ.get("MIRA_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist"))
 
     @app.get("/{path:path}", include_in_schema=False)
     async def spa(path: str) -> Response:
-        if path.startswith("api/") or path.startswith("ws/"):
+        if path.startswith(("api/", "ws/")):
             return JSONResponse({"detail": "not found"}, status_code=404)
         target = (static_dir / path).resolve()
         if static_dir.resolve() in target.parents and target.is_file():

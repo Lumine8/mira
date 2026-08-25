@@ -5,16 +5,16 @@ import pytest
 from app.models import Conversation, Message
 from app.services.ai.fake import FakeProvider
 from app.services.conversation import manager as manager_module
-from app.services.conversation.manager import ConversationManager
 from app.services.conversation.manager import (
     _BROWSE_RE,
-    _BrowseStreamFilter,
     _CONTROL_RE,
     _LISTEN_RE,
     _READ_RE,
     _REMIND_RE,
     _RUN_RE,
     _SELFEDIT_RE,
+    ConversationManager,
+    _BrowseStreamFilter,
 )
 
 
@@ -162,7 +162,7 @@ class RecordingSession:
         self.messages: list[Message] = []
         self._next_id = 1
 
-    def get(self, model, pk):  # noqa: N802 - SQLAlchemy session API
+    def get(self, model, pk):
         return self.conversation if model is Conversation and pk == self.conversation.id else None
 
     def add(self, obj: object) -> None:
@@ -416,8 +416,8 @@ async def test_blocked_page_keeps_trying_another_source(monkeypatch) -> None:
     provider = FakeProvider(
         [
             "Let me look that up. [[browse|https://blocked.example/page|to understand the bull market]]",
-            "[[browse|https://opens.example/bull-market|to read the real article]] "
-            "A bull market is a sustained rise in prices, per the source.",
+            ("[[browse|https://opens.example/bull-market|to read the real article]] "
+            "A bull market is a sustained rise in prices, per the source."),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)
@@ -491,8 +491,8 @@ async def test_front_door_read_keeps_trying_a_different_source(monkeypatch) -> N
         [
             "Let me check. [[browse|https://devpost.com/hackathons|to list upcoming hackathons]]",
             "[[browse|https://hackathons.example/upcoming|to list the actual events]]",
-            "Here they are: SolarHack in Bengaluru on September 6, and a climate "
-            "sprint in October.",
+            ("Here they are: SolarHack in Bengaluru on September 6, and a climate "
+            "sprint in October."),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)
@@ -557,12 +557,12 @@ async def test_stall_reply_is_nudged_into_proposing_the_next_page(monkeypatch) -
     provider = FakeProvider(
         [
             "Let me check. [[browse|https://devpost.com/hackathons|to list upcoming hackathons]]",
-            "The page I looked at was just a front door — it had the menus and "
+            ("The page I looked at was just a front door — it had the menus and "
             "the login buttons, but it didn't actually list any specific events. "
-            "I'll try to find a page that actually shows the listings.",
+            "I'll try to find a page that actually shows the listings."),
             "[[browse|https://hackathons.example/upcoming|to list the actual events]]",
-            "Here they are: SolarHack in Bengaluru on September 6, and a climate "
-            "sprint in October.",
+            ("Here they are: SolarHack in Bengaluru on September 6, and a climate "
+            "sprint in October."),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)
@@ -610,8 +610,8 @@ def test_is_stall_catches_different_path_promises() -> None:
     """'I'll try a different path' and its close variants are promises to keep
     looking, not answers — the turn must not end on them."""
     for text in [
-        "I'll try a different path. Devpost isn't letting me in, so I'll check "
-        "Major League Hacking. They usually have a better map of what's coming up.",
+        ("I'll try a different path. Devpost isn't letting me in, so I'll check "
+        "Major League Hacking. They usually have a better map of what's coming up."),
         "I'll try another way to get the answer.",
         "Let me look somewhere else for a listing.",
         "I'll check another site that shows events.",
@@ -655,13 +655,13 @@ async def test_stall_never_ends_turn_with_fresh_page_undelivered(monkeypatch) ->
 
     provider = FakeProvider(
         [
-            "I'll try a different path. Devpost isn't letting me in, so I'll check "
+            ("I'll try a different path. Devpost isn't letting me in, so I'll check "
             "Major League Hacking. They usually have a better map of what's coming "
             "up. [[browse|https://devpost.com/hackathons|to find the actual list of "
             "upcoming hackathons]][[browse|https://mlh.io/seasons/2025/events|to see "
-            "the MLH event calendar]]",
-            "Here they are: SolarHack in Bengaluru on September 6, and a climate "
-            "sprint in October.",
+            "the MLH event calendar]]"),
+            ("Here they are: SolarHack in Bengaluru on September 6, and a climate "
+            "sprint in October."),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)
@@ -805,10 +805,10 @@ async def test_web_research_ends_with_document_on_her_shelf(monkeypatch) -> None
     provider = FakeProvider(
         [
             "[[browse|https://opens.example/bull-market|to understand the bull market]]",
-            "A bull market is a sustained rise in prices, and a bear market is the opposite. "
+            ("A bull market is a sustained rise in prices, and a bear market is the opposite. "
             "Traders look for a sustained 20% move to call it a trend, and the articles explain "
             "that the key indicators are market breadth, moving averages, and investor sentiment. "
-            "Understanding both shapes helps a trader time entries and recognize reversals.",
+            "Understanding both shapes helps a trader time entries and recognize reversals."),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)
@@ -871,9 +871,9 @@ async def test_web_research_creates_paper_when_she_answers_alongside_the_read(
     session = RecordingSession(conv)
     provider = FakeProvider(
         [
-            "The moon's gravity pulls on the ocean, and that pull is what we "
+            ("The moon's gravity pulls on the ocean, and that pull is what we "
             "feel as the tide. [[browse|https://oceans.example/tides|to verify "
-            "the cause of tides]]",
+            "the cause of tides]]"),
         ]
     )
     mgr = ConversationManager(session, provider, user_id=1)

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -22,7 +21,7 @@ class MessageOut(BaseModel):
     id: int
     speaker: str
     content: str
-    image: Optional[str] = None
+    image: str | None = None
     source: str
     created_at: datetime
 
@@ -30,9 +29,9 @@ class MessageOut(BaseModel):
 class ConversationOut(BaseModel):
     id: int
     kind: str
-    summary: Optional[str] = None
+    summary: str | None = None
     started_at: datetime
-    ended_at: Optional[datetime] = None
+    ended_at: datetime | None = None
 
 
 class ConversationDetailOut(ConversationOut):

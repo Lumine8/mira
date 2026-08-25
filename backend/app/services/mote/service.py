@@ -98,8 +98,8 @@ class MoteLoop:
             return
         # Worker-mode: enqueue a job and let the separate worker process handle it.
         if settings.worker_mode:
-            from app.services.jobs.service import JobService
             from app.services.identity import founder_user_id as _fid
+            from app.services.jobs.service import JobService
             db = SessionLocal()
             try:
                 uid = _fid(db)

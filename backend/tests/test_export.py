@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.services.export.service import _fmt, _render_message, render_conversations
 
@@ -12,7 +12,7 @@ def _msg(speaker: str, content: str, source: str = "text", image: str | None = N
             "content": content,
             "source": source,
             "image": image,
-            "created_at": datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc),
+            "created_at": datetime(2026, 8, 5, 12, 0, tzinfo=UTC),
         },
     )()
 
@@ -76,8 +76,8 @@ def test_render_message_source_label() -> None:
 
 def test_render_conversations_orders_oldest_first() -> None:
     convs = [
-        _conv(2, datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc), summary="older"),
-        _conv(1, datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)),
+        _conv(2, datetime(2026, 8, 2, 10, 0, tzinfo=UTC), summary="older"),
+        _conv(1, datetime(2026, 8, 1, 10, 0, tzinfo=UTC)),
     ]
     msgs = {
         2: [_msg("user", "second conv"), _msg("mira", "hi there")],

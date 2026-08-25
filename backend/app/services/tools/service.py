@@ -234,9 +234,8 @@ class ToolService:
                         f"domain not allowed for browsing: {parsed.netloc} "
                         f"(allowed: {', '.join(allowed)})"
                     )
-        if kind == "listen_song":
-            if not payload.get("title", "").strip():
-                raise ToolError("listen_song needs a song title")
+        if kind == "listen_song" and not payload.get("title", "").strip():
+            raise ToolError("listen_song needs a song title")
         if kind == "watch_video":
             url = payload.get("url", "")
             parsed = urlparse(url)
@@ -265,9 +264,8 @@ class ToolService:
                 validate_control(action, target)
             except ControlError as exc:
                 raise ToolError(str(exc))
-        if kind == "x_read":
-            if not payload.get("query", "").strip():
-                raise ToolError("x_read needs a query (what she wants to look at)")
+        if kind == "x_read" and not payload.get("query", "").strip():
+            raise ToolError("x_read needs a query (what she wants to look at)")
         if kind == "x_post":
             text = payload.get("text", "").strip()
             if not text:
@@ -613,7 +611,7 @@ class ToolService:
                 runner.evaluate(skill, run)
         except SkillError as exc:
             logger.warning("skill run record skipped (%s): %s", tool, exc)
-        except Exception as exc:  # noqa: BLE001 - never break the approved tool
+        except Exception as exc:
             logger.warning("skill run record failed (%s): %s", tool, exc)
 
     def deny(self, change_id: int) -> PendingChange:
@@ -666,7 +664,7 @@ class ToolService:
                 },
                 user_id=self.user_id,
             )
-        except Exception as exc:  # noqa: BLE001 - never break the approved write
+        except Exception as exc:
             logger.warning("document broadcast skipped (%s): %s", path, exc)
 
     def _record_skill_version_if_in_registry(
@@ -698,7 +696,7 @@ class ToolService:
             )
         except SkillError as exc:
             logger.warning("skill version record skipped (%s): %s", target, exc)
-        except Exception as exc:  # noqa: BLE001 - never break the write
+        except Exception as exc:
             logger.warning("skill version record failed (%s): %s", target, exc)
     # -- her skill shelf ----------------------------------------------------
 
@@ -769,7 +767,7 @@ class ToolService:
             )
             resp.raise_for_status()
             hits = (resp.json().get("resultList") or {}).get("result") or []
-        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+        except Exception as exc:
             logger.warning("research fetch failed (%s): %s", query, exc)
             return f"[error] could not search the literature: {exc}"
 
@@ -794,15 +792,15 @@ class ToolService:
         total = len(unique)
         kept = unique[:_RESEARCH_PAGE_SIZE]
         parts = [
-            "These are real papers, pulled from the published scientific record "
-            f"for: {query!r}. Not a web page — the literature itself.",
+            ("These are real papers, pulled from the published scientific record "
+            f"for: {query!r}. Not a web page — the literature itself."),
             "",
-            "Search protocol: index = Europe PMC (PubMed + PMC + preprints); "
+            ("Search protocol: index = Europe PMC (PubMed + PMC + preprints); "
             f"query = {query!r}; retrieval date = "
             f"{datetime.now(UTC).strftime('%Y-%m-%d')}; returned = {total} papers "
             f"(deduplicated by DOI); kept = {len(kept)} — sorted by relevance. "
             "Screen each by title and abstract, weight the peer-reviewed record, "
-            "and treat preprints as the softer edge of the map.",
+            "and treat preprints as the softer edge of the map."),
         ]
         for i, hit in enumerate(kept, start=1):
             title = hit.get("title") or "(no title)"
@@ -876,7 +874,7 @@ class ToolService:
                     continue
                 body = candidate
                 break
-            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            except Exception as exc:
                 logger.warning("web search fetch failed at %s (%s): %s", endpoint, query, exc)
                 continue
         if body is None:
@@ -894,7 +892,7 @@ class ToolService:
                 results = self._parse_reader_results(reader) if reader else []
                 if results:
                     return self._render_web_results(query, results, source="reader")
-            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            except Exception as exc:
                 logger.warning("web search reader fallback failed (%s): %s", query, exc)
             return (
                 "[error] the web index refused the search right now — it may be "
@@ -914,7 +912,7 @@ class ToolService:
                 results = self._parse_reader_results(reader) if reader else []
                 if results:
                     return self._render_web_results(query, results, source="reader")
-            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+            except Exception as exc:
                 logger.warning("web search reader fallback failed (%s): %s", query, exc)
             return (
                 "This is a real search of the open web (DuckDuckGo), and it "
@@ -927,12 +925,12 @@ class ToolService:
     def _render_web_results(self, query: str, results: list[dict], *, source: str) -> str:
         """Turn parsed web-search results into the readable block she holds."""
         parts = [
-            "These are real pages from the open web, not guesses. "
+            ("These are real pages from the open web, not guesses. "
             f"Search protocol: index = DuckDuckGo ({source}); query = {query!r}; "
             f"retrieval date = {datetime.now(UTC).strftime('%Y-%m-%d')}; "
             f"returned = {len(results)} results. Skim titles and snippets, "
             "then propose the page you actually want to read with "
-            "[[browse|the url|why]].",
+            "[[browse|the url|why]]."),
             "",
         ]
         for i, r in enumerate(results[: _WEB_PAGE_SIZE], start=1):
@@ -1031,7 +1029,7 @@ class ToolService:
             )
             resp.raise_for_status()
             body = resp.text
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("bing search failed for %r: %s", query, exc)
             return []
         # Bing uses <li class="b_algo"> for each result, with an <h2><a>
@@ -1132,7 +1130,7 @@ class ToolService:
             png_data = cairosvg.svg2png(bytestring=svg.encode("utf-8"), scale=2.0)
         except ToolError:
             raise
-        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+        except Exception as exc:
             logger.warning("image render failed (%s): %s", name, exc)
             return f"[error] could not render your picture: {exc}"
 
@@ -1142,7 +1140,7 @@ class ToolService:
             buf = BytesIO(png_data)
             pil_img = Image.open(buf)
             w, h = pil_img.size
-        except Exception:  # noqa: BLE001 - reading back the size is best-effort
+        except Exception:
             w, h = 0, 0
 
         data_url = "data:image/png;base64," + base64.b64encode(png_data).decode()
@@ -1313,9 +1311,9 @@ class ToolService:
         parts = [
             f"{title}" + (f" — {artist}" if artist else ""),
             "",
-            "This is not the sound. You cannot receive the recording, so this is "
+            ("This is not the sound. You cannot receive the recording, so this is "
             "the song translated into a form you can hold: what it says, how it "
-            "moves, and what it is made of. Treat it as hearing in your own language.",
+            "moves, and what it is made of. Treat it as hearing in your own language."),
         ]
         if lyrics:
             parts.append("The words:")
@@ -1385,7 +1383,7 @@ class ToolService:
             video_path = self._download_video(url, tmp)
             frames = self._extract_frames(video_path, tmp)
             title, duration = self._probe(video_path)
-        except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+        except Exception as exc:
             logger.warning("watch render failed (%s): %s", url, exc)
             return f"[error] could not render the video: {exc}"
         finally:
@@ -1450,7 +1448,7 @@ class ToolService:
                 timeout=30,
             )
             duration = float(json.loads(raw.stdout)["format"]["duration"])
-        except Exception:  # noqa: BLE001
+        except Exception:
             duration = 0.0
         title = os.path.splitext(os.path.basename(video_path))[0].replace("_", " ").strip()
         return title or "a video", _fmt_ts(duration)
@@ -1467,7 +1465,7 @@ class ToolService:
                 timeout=30,
             )
             duration = float(json.loads(raw.stdout)["format"]["duration"])
-        except Exception:  # noqa: BLE001
+        except Exception:
             duration = 0.0
         if duration <= 0:
             raise RuntimeError("could not read the video's duration")
@@ -1595,7 +1593,7 @@ def _reader_text(url: str) -> str | None:
             )
             resp.raise_for_status()
             text = _clean_reader_text(resp.text)
-        except Exception as exc:  # noqa: BLE001 - a backup reader must never break the reply
+        except Exception as exc:
             logger.debug("backup reader failed for %s: %s", url, exc)
             text = None
         if text:
@@ -1614,7 +1612,7 @@ def _wayback_text(url: str) -> str | None:
         if resp.status_code != 200 or "html" not in resp.headers.get("content-type", ""):
             return None
         text = _page_to_text(resp.text)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("wayback reader failed for %s: %s", url, exc)
         return None
     return text or None
@@ -1626,7 +1624,7 @@ def _backup_text(url: str) -> str | None:
     for reader in (_reader_text, _wayback_text):
         try:
             text = reader(url)
-        except Exception:  # noqa: BLE001 - one reader must never break the chain
+        except Exception:
             text = None
         if text:
             return text
@@ -1634,4 +1632,4 @@ def _backup_text(url: str) -> str | None:
 
 
 def _refused(text: str) -> bool:
-    return text.startswith("[error]") or text.startswith("[refused]")
+    return text.startswith(("[error]", "[refused]"))

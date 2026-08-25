@@ -109,18 +109,17 @@ class GeminiProvider(AIProvider):
                 # Despite alt=sse, the endpoint streams a JSON array of response
                 # objects (chunks), one concatenated after another. Accumulate
                 # and parse incrementally so long replies stream in.
-                async with httpx.AsyncClient(timeout=300) as client:
-                    async with client.stream(
-                        "POST", url, json=body
-                    ) as resp:
-                        resp.raise_for_status()
-                        buf = ""
-                        async for chunk in resp.aiter_text():
-                            buf += chunk
-                            pieces, leftover = _extract_chunks(buf)
-                            buf = leftover
-                            for piece in pieces:
-                                yield piece
+                async with httpx.AsyncClient(timeout=300) as client, client.stream(
+                    "POST", url, json=body
+                ) as resp:
+                    resp.raise_for_status()
+                    buf = ""
+                    async for chunk in resp.aiter_text():
+                        buf += chunk
+                        pieces, leftover = _extract_chunks(buf)
+                        buf = leftover
+                        for piece in pieces:
+                            yield piece
                 return
             except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_exc = exc

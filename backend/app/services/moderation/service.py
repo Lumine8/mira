@@ -14,7 +14,7 @@ flags, and the permanent destruction of a world (account deletion).
 import asyncio
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -34,8 +34,8 @@ from app.models import (
     Message,
     MiraState,
     ModerationFlag,
-    MoteSharedTime,
     MoodRecord,
+    MoteSharedTime,
     PendingChange,
     PerceivedEvent,
     Question,
@@ -64,7 +64,7 @@ class ModerationError(Exception):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # -- the conservative screen -------------------------------------------------

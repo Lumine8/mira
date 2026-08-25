@@ -1,6 +1,6 @@
 """Public endpoints for data disclosures and age verification."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/disclaimers", tags=["disclaimers"])
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class AgeConfirmation(BaseModel):

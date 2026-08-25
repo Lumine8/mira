@@ -100,7 +100,7 @@ def test_magic_link_request_and_verify(db) -> None:
     _founder(db)
     svc = AuthService(db)
     code = svc.request_magic_link("Someone@Example.com")
-    user, access_token, refresh_token = svc.verify_magic_link("someone@example.com", code.lower())
+    user, _access_token, refresh_token = svc.verify_magic_link("someone@example.com", code.lower())
     assert user.email == "someone@example.com"
     assert user.role == "person"
     assert AuthService(db).session_user(refresh_token).id == user.id
@@ -181,7 +181,7 @@ def test_google_callback_exchange(monkeypatch, db) -> None:
     monkeypatch.setattr(auth_module.httpx, "post", lambda *a, **k: _Resp())
     monkeypatch.setattr(auth_module.httpx, "get", lambda *a, **k: _Profile())
 
-    user, access_token, refresh_token = svc.google_callback("authcode", state)
+    user, _access_token, refresh_token = svc.google_callback("authcode", state)
     assert user.google_sub == "google-123"
     assert user.email == "guy@gmail.com"
     assert AuthService(db).session_user(refresh_token).id == user.id
@@ -325,3 +325,43 @@ def test_first_meeting_guest_not_minted_by_resolution(monkeypatch, db) -> None:
     with pytest.raises(Exception):
         identity.resolve_request_actor(db, guest_id="device-stray")
     assert db.query(User).count() == before  # no world minted for a stray
+
+
+def test_password_sign_up_returns_string_tokens(monkeypatch, db) -> None:
+    """Password sign-up must return string access_token and refresh_token,
+    not a tuple. Regression test for the create_session tuple bug."""
+    _settings(monkeypatch)
+    _founder(db)
+    auth = AuthService(db)
+    user = User(name="alice", role="person", email="alice@example.com")
+    db.add(user)
+    db.flush()
+    auth.set_password(user.id, "s3cret!!")
+    db.refresh(user)
+    access_token = auth.create_access_token(user)
+    _at, refresh_token = auth.create_session(user)
+    assert isinstance(access_token, str), f"access_token is {type(access_token)}, not str"
+    assert isinstance(refresh_token, str), f"refresh_token is {type(refresh_token)}, not str"
+    assert len(access_token) > 10
+    assert len(refresh_token) > 10
+
+
+def test_password_sign_in_returns_string_tokens(monkeypatch, db) -> None:
+    """Password sign-in must return (user, str, str). Regression test for the
+    create_session tuple bug."""
+    _settings(monkeypatch)
+    _founder(db)
+    auth = AuthService(db)
+    user = User(name="bob", role="person", email="bob@example.com")
+    db.add(user)
+    db.flush()
+    auth.set_password(user.id, "p4ss!!!!")
+    db.refresh(user)
+    result = auth.verify_password("bob@example.com", "p4ss!!!!")
+    assert result is not None
+    user, access_token, refresh_token = result
+    assert isinstance(user, User)
+    assert isinstance(access_token, str), f"access_token is {type(access_token)}, not str"
+    assert isinstance(refresh_token, str), f"refresh_token is {type(refresh_token)}, not str"
+    assert len(access_token) > 10
+    assert len(refresh_token) > 10

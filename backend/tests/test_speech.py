@@ -87,7 +87,7 @@ def test_speak_route_allows_call_conversation() -> None:
 
 
 def test_tts_route_speaks_outside_a_call() -> None:
-    from app.api.routes.speech import tts_audio, TtsRequest
+    from app.api.routes.speech import TtsRequest, tts_audio
 
     class FakeSettings:
         tts_enabled = True
@@ -102,7 +102,7 @@ def test_tts_route_speaks_outside_a_call() -> None:
 
 
 def test_tts_route_refuses_when_disabled() -> None:
-    from app.api.routes.speech import tts_audio, TtsRequest
+    from app.api.routes.speech import TtsRequest, tts_audio
 
     class FakeSettings:
         tts_enabled = False

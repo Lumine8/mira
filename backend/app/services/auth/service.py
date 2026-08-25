@@ -10,7 +10,7 @@ import hashlib
 import logging
 import secrets
 import smtplib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from urllib.parse import urlencode
 
@@ -49,14 +49,14 @@ def _hash(value: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _aware(value: datetime) -> datetime:
     """Some drivers return naive datetimes from tz-aware columns (sqlite);
     Postgres returns aware ones. Normalise so comparisons never crash."""
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 
@@ -189,7 +189,7 @@ class AuthService:
         if not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
             return None
         access_token = self.create_access_token(user)
-        refresh_token = self.create_session(user)
+        _access_token, refresh_token = self.create_session(user)
         return user, access_token, refresh_token
 
     def has_password(self, user_id: int) -> bool:

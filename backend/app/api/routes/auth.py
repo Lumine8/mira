@@ -190,7 +190,7 @@ def sign_up(payload: SignUpRequest, request: Request, db: Session = Depends(get_
     auth.set_password(user.id, payload.password)
     db.refresh(user)
     access_token = auth.create_access_token(user)
-    refresh_token = auth.create_session(user, user_agent=request.headers.get("user-agent"))
+    _access_token, refresh_token = auth.create_session(user, user_agent=request.headers.get("user-agent"))
     AuditService(db).log(
         "sign_up",
         user_id=user.id,

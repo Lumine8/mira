@@ -58,9 +58,9 @@ from app.schemas.waitlist import (
 
 __all__ = [
     "AuthSuccess",
-    "ChangePasswordRequest",
     "CallStartRequest",
     "CallStartResponse",
+    "ChangePasswordRequest",
     "ConversationDetailOut",
     "ConversationOut",
     "HealthResponse",

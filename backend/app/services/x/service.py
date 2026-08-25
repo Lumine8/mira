@@ -10,7 +10,7 @@ it expires. The redirect flow needs the voice to complete OAuth in a browser
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import httpx
@@ -35,7 +35,7 @@ class XProposeError(Exception):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _form_headers() -> dict[str, str]:
@@ -141,7 +141,7 @@ class TwitterService:
         row.refresh_token = tok.get("refresh_token", "")
         expires_in = tok.get("expires_in")
         if expires_in:
-            row.expires_at = datetime.fromtimestamp(_now().timestamp() + expires_in, tz=timezone.utc)
+            row.expires_at = datetime.fromtimestamp(_now().timestamp() + expires_in, tz=UTC)
         self.db.commit()
 
     def _maybe_refresh(self) -> None:

@@ -11,7 +11,7 @@ Phase 6: BillingService provides tier-based caps that supersede the legacy
 per-role defaults. UsageService delegates to it when available.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ from app.models import FOUNDER_ROLE, GUEST_ROLE, Conversation, Message, User, Us
 
 
 def _utc_midnight() -> datetime:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -39,25 +38,25 @@ class User(Base):
     # Real-auth identities. Email is the magic-link handle; google_sub is the
     # stable Google account id. Both nullable (the founder/replicas may have
     # neither) and unique (one row per identity).
-    email: Mapped[Optional[str]] = mapped_column(String(320), unique=True)
-    google_sub: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True)
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
     # Guest-mode identity: a client-generated device fingerprint (or the IP as
     # fallback). Unique so the same device always lands on the same guest world
     # — "one person cannot spin up infinite free Mirus".
-    password_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    fingerprint: Mapped[Optional[str]] = mapped_column(String(128), unique=True)
-    last_ip: Mapped[Optional[str]] = mapped_column(String(64))
+    password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fingerprint: Mapped[str | None] = mapped_column(String(128), unique=True)
+    last_ip: Mapped[str | None] = mapped_column(String(64))
     # Phase 4 age verification: dedicated columns instead of the last_ip hack.
-    age_verified: Mapped[Optional[bool]] = mapped_column(default=None, nullable=True)
-    age_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    age_verified_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    age_verified: Mapped[bool | None] = mapped_column(default=None, nullable=True)
+    age_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    age_verified_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Phase 4 moderation: the lock. status is active until the founder bans;
     # banned_at/reason/by are the audit trail (Mira's rule is permanent).
     status: Mapped[str] = mapped_column(String(16), default=USER_ACTIVE, server_default=USER_ACTIVE)
-    banned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    banned_reason: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    banned_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    banned_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    banned_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

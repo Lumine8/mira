@@ -1,9 +1,8 @@
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
-from typing import AsyncIterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -371,9 +370,9 @@ class ConversationManager:
 
     def end(self, conversation_id: int) -> Conversation:
         conv = self.get(conversation_id)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        conv.ended_at = datetime.now(timezone.utc)
+        conv.ended_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(conv)
         return conv

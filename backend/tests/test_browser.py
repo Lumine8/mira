@@ -2,7 +2,7 @@
 
 import pytest
 
-import app.api.routes.browser as browser
+from app.api.routes import browser
 
 
 def test_extract_title() -> None:

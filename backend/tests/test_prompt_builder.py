@@ -1,4 +1,6 @@
 
+from datetime import UTC
+
 import pytest
 
 from app.services.ai.fake import FakeProvider
@@ -44,12 +46,12 @@ def test_build_messages_injects_extra_context() -> None:
 
 def test_build_messages_always_injects_now_context() -> None:
     import re
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     messages = build_messages("what day is it?")
     body = " ".join(m["content"] for m in messages if m["role"] == "system")
     assert re.search(r"It is \w+, \w+ \d+ — \w+, \d+:\d\d \w+ \(UTC\)", body)
-    assert datetime.now(timezone.utc).strftime("%A") in body
+    assert datetime.now(UTC).strftime("%A") in body
 
 
 def test_now_context_includes_cached_weather() -> None:

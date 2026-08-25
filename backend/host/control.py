@@ -137,7 +137,7 @@ def _brightness_step(up: bool) -> str:
         "ForEach-Object { $_.WmiSetBrightness(1, $target) }; "
         "Write-Output \"$cur->$target\" } catch { Write-Output \"no brightness control\" }"
     )
-    code, out = _ps(ps)
+    _code, out = _ps(ps)
     if "no brightness control" in out or "->" not in out:
         return "brightness: no control available"
     return f"brightness {out.strip()}"

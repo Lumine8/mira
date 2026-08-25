@@ -11,15 +11,16 @@ founder user (the original owner's seat, id of the first/only user, created as
 'voice' on a fresh database) is seeded so backfill always has a home.
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0015_user_scoping"
-down_revision: Union[str, None] = "0014_mote"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0014_mote"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # New scoping columns: added, backfilled, then made NOT NULL + FK + index.
 # scheduler_log is pure diagnostics (never user-facing) so it stays nullable.

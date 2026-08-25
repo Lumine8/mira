@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -90,9 +92,9 @@ def _conv(db, user_id: int) -> Conversation:
 
 
 def _utc_future():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    return datetime.now(timezone.utc) + timedelta(days=1)
+    return datetime.now(UTC) + timedelta(days=1)
 
 
 # -- the screen --------------------------------------------------------------
