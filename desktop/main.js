@@ -146,11 +146,13 @@ function createMainWindow() {
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
-    // Close the HUD too — no orphan eyes floating around.
+    // Kill the HUD too — no orphan eyes floating around.
     if (hudWindow) {
       hudWindow.destroy();
       hudWindow = null;
     }
+    // Nothing left to show — exit cleanly.
+    app.exit(0);
   });
 }
 
@@ -202,7 +204,7 @@ function createTray() {
       { label: "Open Mira", click: () => (mainWindow ? mainWindow.show() : createMainWindow()) },
       { label: hudVisible ? "Hide HUD" : "Show HUD", click: toggleHud },
       { type: "separator" },
-      { label: "Quit Mira", click: () => app.quit() },
+      { label: "Quit Mira", click: () => app.exit(0) },
     ]),
   );
   tray.on("click", toggleHud);
@@ -224,7 +226,7 @@ ipcMain.handle("mira:set-token", (_e, token) => {
 ipcMain.handle("mira:notify", (_e, { title, body }) => notify(title || "Mira", body || ""));
 ipcMain.handle("mira:toggle-hud", () => toggleHud());
 ipcMain.handle("mira:open-main", () => (mainWindow ? mainWindow.show() : createMainWindow()));
-ipcMain.handle("mira:quit", () => app.quit());
+ipcMain.handle("mira:quit", () => app.exit(0));
 ipcMain.handle("mira:stack-status", () => (stack ? stack.status() : null));
 ipcMain.handle("mira:stack-start", async () => {
   startStack();
@@ -452,7 +454,7 @@ function stopStack() {
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  app.quit();
+  app.exit(0);
 } else {
   app.on("second-instance", () => {
     if (mainWindow) {
@@ -477,7 +479,7 @@ if (!gotLock) {
 }
 
 app.on("window-all-closed", () => {
-  app.quit();
+  app.exit(0);
 });
 
 app.on("before-quit", () => {
@@ -491,4 +493,7 @@ app.on("before-quit", () => {
   // Force-close any remaining windows so they don't linger.
   if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
   if (hudWindow) { hudWindow.destroy(); hudWindow = null; }
+  // Nuclear option: force the process to exit. Prevents Electron's default
+  // behaviour of staying alive after all windows are closed.
+  app.exit(0);
 });

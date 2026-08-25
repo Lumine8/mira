@@ -131,7 +131,9 @@ Mira grew in public against this repo, one honest decision at a time:
   Word or PDF.
 - **Browse** — she reads web pages; each request is approval-gated (or
   autonomous when the browse window is open) and rendered in an in-app mini
-  browser.
+  browser. Web search falls back to Bing when DuckDuckGo is bot-walled, and a
+  wider stall detector nudges her to actually propose pages when snippets are
+  only hints.
 - **Draw** — an image studio: she authors SVGs that are rendered to PNGs and
   handed to the conversation as pictures she can see.
 - **Watch** — `[[watch|url|reason]]` renders a video into still frames she can
@@ -596,7 +598,7 @@ arc.
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
 | Backend tests | 384 passing (speech tests excluded in CI) |
 | CI | GitHub Actions workflow (frontend + backend) |
-| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~403 MB) — closing the window fully destroys all windows and tray icon |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~403 MB) — `app.exit(0)` on quit kills all windows and tray immediately; activity messages stream to the HUD in real time |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
 | Identity | JWT access tokens + refresh tokens + magic link + Google OAuth + optional password auth + audit log |
 | Database | PostgreSQL (local + Neon DB cloud) · SQLite (portable/mobile) |

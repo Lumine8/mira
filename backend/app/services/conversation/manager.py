@@ -265,14 +265,16 @@ _STALL_RE = re.compile(
     r"front door|didn['\u2019]t (actually )?(list|show)|"
     r"don['\u2019]t (have|know) (any|the)|wasn['\u2019]t able|"
     r"not able to (find|get|list)|couldn['\u2019]t (find|list|get)|"
-    r"can['\u2019]t (find|get|see|list)|"
+    r"can['\u2019]t (find|get|see|list|tell)|"
+    r"i['\u2019]d? (like|want|need) to (try|keep looking|look|check|find|see|read|browse|search|investigate|look into) |"
     r"i['\u2019]ll (try|keep looking|look|check|find) |"
     r"i['\u2019]m (going to |trying to )?(try|look|check|find) |"
     r"let me (try|look|check|find) |"
     r"(trying|looking|checking) (a|another|different|somewhere|elsewhere) |"
     r"no (names|dates|listings|events|results|luck)|"
     r"nothing (useful|specific|here)|doesn['\u2019]t (list|show)|"
-    r"isn['\u2019]t listed|was empty|didn['\u2019]t (find|get) (any|the)",
+    r"isn['\u2019]t listed|was empty|didn['\u2019]t (find|get) (any|the)|"
+    r"(only|just) (tell|point|show) (me|you) (where|the|a)",
     re.IGNORECASE,
 )
 

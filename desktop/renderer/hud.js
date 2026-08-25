@@ -168,6 +168,8 @@ async function connectConvo() {
         setMiraLine("thinking…", "is-speaking");
         streamed += msg.content || "";
         flushCompleteSentences();
+      } else if (msg.type === "activity") {
+        if (inReply) setMiraLine(msg.label || "thinking…", "is-speaking");
       } else if (msg.type === "pending_change") {
         addAlert("approval needed", msg.change.summary || msg.change.kind);
       } else if (msg.type === "error") {
@@ -417,16 +419,11 @@ function sendUtterance(chunks, sampleRate) {
   }
   const wav = encodeWav(pcm, sampleRate);
   const gate = () => {
-    // Cheap audio-level gate: does this audio actually contain her name?
-    // The backend keyword-spotter answers without running whisper, so chatter
-    // she wasn't summoned by never reaches transcription. A false "not heard"
-    // must not swallow real speech though — so the gate is a soft hint, and the
-    // fuzzy text gate below is the real filter.
     return window.mira.wakeCheck(wav).then(
       (heard) => {
         transcribe(wav);
       },
-      () => transcribe(wav), // gate unavailable: fall back to today's behaviour
+      () => transcribe(wav),
     );
   };
   const transcribe = (seg) => {
@@ -441,7 +438,7 @@ function sendUtterance(chunks, sampleRate) {
           return;
         }
         const gated = applyWakeWord(spoken);
-        if (gated === null) return; // ignored — she wasn't summoned
+        if (gated === null) return;
         if (gated) sendAsk(gated);
         else setMiraLine("didn't catch that — try again", "");
       })

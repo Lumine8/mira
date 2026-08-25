@@ -880,9 +880,12 @@ class ToolService:
                 logger.warning("web search fetch failed at %s (%s): %s", endpoint, query, exc)
                 continue
         if body is None:
-            # Both endpoints are bot-walled. Fall back to the extraction proxy,
-            # which renders the same search page through its own browser and
-            # returns the results as readable text.
+            # Both endpoints are bot-walled. Try Bing as a second search engine,
+            # then fall back to the extraction proxy rendering DDG through its
+            # own browser.
+            bing_results = self._search_bing(query)
+            if bing_results:
+                return self._render_web_results(query, bing_results, source="bing")
             try:
                 fallback_url = (
                     "https://lite.duckduckgo.com/lite/?q=" + quote(query)
@@ -901,6 +904,18 @@ class ToolService:
 
         results = self._parse_ddg_results(body)
         if not results:
+            # DDG returned a page but no parseable results — try the extraction
+            # proxy as a second chance before giving up.
+            try:
+                fallback_url = (
+                    "https://lite.duckduckgo.com/lite/?q=" + quote(query)
+                )
+                reader = _reader_text(fallback_url)
+                results = self._parse_reader_results(reader) if reader else []
+                if results:
+                    return self._render_web_results(query, results, source="reader")
+            except Exception as exc:  # noqa: BLE001 - degrade to an honest error
+                logger.warning("web search reader fallback failed (%s): %s", query, exc)
             return (
                 "This is a real search of the open web (DuckDuckGo), and it "
                 f"returned nothing readable for: {query!r}. The absence can be "
@@ -999,6 +1014,50 @@ class ToolService:
         if href.startswith(("http://", "https://")):
             return href
         return ""
+
+    def _search_bing(self, query: str) -> list[dict]:
+        """Bing HTML search as a fallback when DuckDuckGo is bot-walled.
+        Parses the classic Bing results page for title/url/snippet triples."""
+        try:
+            resp = httpx.get(
+                "https://www.bing.com/search",
+                params={"q": query, "count": str(_WEB_PAGE_SIZE)},
+                timeout=_BROWSE_TIMEOUT,
+                headers={
+                    "User-Agent": _BROWSE_UA,
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            body = resp.text
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("bing search failed for %r: %s", query, exc)
+            return []
+        # Bing uses <li class="b_algo"> for each result, with an <h2><a>
+        # for the title+URL and a <p> for the snippet.
+        found: list[dict] = []
+        for piece in re.split(r'<li class="b_algo"', body)[1:]:
+            title_m = re.search(
+                r'<h2[^>]*><a[^>]*href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>',
+                piece,
+                re.DOTALL,
+            )
+            if not title_m:
+                continue
+            title = re.sub(r"<[^>]+>", "", title_m.group("title"))
+            title = html.unescape(title).strip()
+            url = html.unescape(title_m.group("href")).strip()
+            snip_m = re.search(r"<p[^>]*>(?P<snippet>.*?)</p>", piece, re.DOTALL)
+            snip = ""
+            if snip_m:
+                snip = re.sub(r"<[^>]+>", "", snip_m.group("snippet"))
+                snip = html.unescape(snip).strip()
+                if len(snip) > _MAX_WEB_SNIPPET:
+                    snip = snip[:_MAX_WEB_SNIPPET].rstrip() + "…"
+            if title and url:
+                found.append({"title": title, "url": url, "snippet": snip})
+        return found[:_WEB_PAGE_SIZE]
 
     # -- her image studio ----------------------------------------------------
 
