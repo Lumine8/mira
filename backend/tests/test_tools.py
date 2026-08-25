@@ -876,7 +876,8 @@ def test_parse_ddg_results_handles_html_format() -> None:
 
 def test_web_search_bot_wall_falls_back_and_reports(monkeypatch, tmp_path: pytest.TempPathFactory) -> None:
     """A bot-wall (anomaly page) from one endpoint tries the next; when both
-    refuse, the search returns an honest error instead of silence."""
+    refuse, the search tries Bing (which also fails), and returns an honest
+    error instead of silence."""
     import app.services.tools.service as tools_module
 
     class _Anomaly:
@@ -895,10 +896,9 @@ def test_web_search_bot_wall_falls_back_and_reports(monkeypatch, tmp_path: pytes
     svc = tools_module.ToolService.__new__(tools_module.ToolService)
     svc._record_skill_tool_run = lambda *a, **k: None
     out = svc._render_web_search("weather")
-    assert calls == [
-        "https://lite.duckduckgo.com/lite/",
-        "https://html.duckduckgo.com/html/",
-    ]
+    assert "https://lite.duckduckgo.com/lite/" in calls
+    assert "https://html.duckduckgo.com/html/" in calls
+    assert "https://www.bing.com/search" in calls
     assert "[error] the web index refused" in out
 
 
