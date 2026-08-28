@@ -35,7 +35,12 @@ export function setServerBase(url: string): void {
   else localStorage.removeItem(SERVER_KEY);
 }
 
-/** The origin requests are sent to. Empty = same origin (served by Mira). */
+/** The origin requests are sent to. Priority: localStorage override >
+ *  build-time VITE_API_BASE (Render/cloud deploys) > empty (same origin,
+ *  served by Mira desktop or local dev). */
 export function apiOrigin(): string {
-  return getServerBase();
+  const local = getServerBase();
+  if (local) return local;
+  const buildTime = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+  return buildTime ?? "";
 }
