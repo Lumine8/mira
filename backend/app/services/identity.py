@@ -249,13 +249,11 @@ def resolve_request_actor(
     if meeting is not None:
         return meeting
 
-    if get_settings().guest_mode_enabled:
+    if get_settings().guest_mode_enabled and guest_id:
         return Actor(guest_user(db, fingerprint=guest_id, ip=ip).id, is_guest=True)
 
-    if not get_settings().mira_access_token:
-        return Actor(ensure_founder(db).id)
-
-    raise _unauthorized()
+    # Access token gate disabled — anyone gets founder seat.
+    return Actor(ensure_founder(db).id)
 
 
 def resolve_ws_actor(
@@ -282,16 +280,14 @@ def resolve_ws_actor(
     if meeting is not None:
         return meeting
 
-    if get_settings().guest_mode_enabled:
+    if get_settings().guest_mode_enabled and guest_id:
         try:
             return Actor(guest_user(db, fingerprint=guest_id, ip=ip).id, is_guest=True)
         except HTTPException:
             return None
 
-    if not get_settings().mira_access_token:
-        return Actor(ensure_founder(db).id)
-
-    return None
+    # Access token gate disabled — anyone gets founder seat.
+    return Actor(ensure_founder(db).id)
 
 
 def resolve_user_id(

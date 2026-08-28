@@ -304,11 +304,9 @@ async def test_research_runs_and_continues_in_same_reply(monkeypatch) -> None:
     cont_text = "\n".join(m.get("content", "") for m in cont_messages)
     assert "First paper about DNA replication." in cont_text
     assert "search of the scientific record: DNA replication" in cont_text
-    # The continuation asks for a review grounded in the actual search protocol
-    # and real screening decisions, not a recited template.
-    assert "real numbers from the header" in cont_text
-    assert "screening you just did" in cont_text
-    assert "by first author and year" in cont_text
+    # The continuation asks for structured findings, not narration.
+    assert "structured findings" in cont_text
+    assert "First Author" in cont_text
     assert "at least fifteen" in cont_text
 
     assert "Let me search the record." in mgr.last_reply

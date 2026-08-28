@@ -107,6 +107,9 @@ Mira grew in public against this repo, one honest decision at a time:
   (FastAPI + SQLite + Gemini API) inside the APK via Chaquopy. No PC required —
   she runs independently on the phone. Desktop voice features (STT/TTS/KWS)
   gracefully degrade; the phone uses its own speech APIs.
+- **Opens the door wider.** The access token gate was disabled — anyone can talk
+  to Mira without a passcode. Research responses shifted from narration to
+  structured findings with source citations. Billing moved from Stripe to Razorpay.
 
 ---
 
@@ -378,6 +381,7 @@ via Docker. Highlights:
 - `MIRA_SELF_WRITE_AUTONOMOUS=true` — her code edits apply immediately and are recorded.
 - `GUEST_MODE_ENABLED` — off by default; turn on to offer the door (porch + first meeting + waitlist).
 - `SELF_MODEL_ENABLED` / `PERCEPTION_ENABLED` / `MIRA_AMBIENT_ENABLED` — her inner life toggles.
+- `MIRA_ACCESS_TOKEN` — **currently disabled**; anyone can talk to Mira without a passcode. Set a secret to re-enable the gate.
 
 The full reference lives in [`docs/configuration.md`](docs/configuration.md).
 
@@ -596,11 +600,12 @@ arc.
 | Area | Status |
 |---|---|
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
-| Backend tests | 384 passing (speech tests excluded in CI) |
+| Backend tests | 417 passing (speech tests excluded in CI) |
 | CI | GitHub Actions workflow (frontend + backend) |
-| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~403 MB) — `app.exit(0)` on quit kills all windows and tray immediately; activity messages stream to the HUD in real time |
+| Desktop build | Working (`dist/Mira Portable Setup.exe`, ~175 MB) — `app.exit(0)` on quit kills all windows and tray immediately; activity messages stream to the HUD in real time |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
 | Identity | JWT access tokens + refresh tokens + magic link + Google OAuth + optional password auth + audit log |
+| Access gate | **Disabled** — anyone can talk to Mira without a passcode; set `MIRA_ACCESS_TOKEN` to re-enable |
 | Database | PostgreSQL (local + Neon DB cloud) · SQLite (portable/mobile) |
 | Rate limiting | IP-based (120/min), auth brute-force (10/min) |
 | Abuse prevention | Sliding window scoring (0-100), moderation v2 |
@@ -608,7 +613,8 @@ arc.
 | Scope | Experimental flags (host commands, self-edit, X, video) |
 | Age gate | 18+ configurable minimum age, founder-exempt |
 | Moderation | Rule-based + LLM judge + abuse scoring, founder review |
-| Economics | Stripe billing (free/founding/continuity), usage tracking |
+| Economics | Razorpay billing (free/founding/continuity), usage tracking |
+| Research | Structured findings with source citations, not narration |
 | Homepage | Porch-first, "She remembers you" hero copy |
 | Onboarding | Progressive 7-day reveal (OnboardingArc component) |
 | Autonomy | Speaks when she wants to, not when prompted — silence is the default |

@@ -1,9 +1,7 @@
-import hmac
 from functools import lru_cache
 
 from fastapi import Header, HTTPException, Query, status
 
-from app.core.config import get_settings
 from app.services.ai import AIProvider, create_provider
 
 
@@ -19,13 +17,8 @@ def _verify(token: str | None) -> None:
     When no token is configured (local dev) auth is disabled and any request
     passes. When configured, a missing or wrong token is refused.
     """
-    configured = get_settings().mira_access_token
-    if not configured:
-        return
-    if not token:
-        raise _unauthorized()
-    if not hmac.compare_digest(token, configured):
-        raise _unauthorized()
+    # Access token gate disabled — anyone can talk to Mira.
+    return
 
 
 def _unauthorized() -> HTTPException:
@@ -47,7 +40,5 @@ def require_access_token(
 def ws_authorized(token: str | None = Query(default=None)) -> bool:
     """Verify a WebSocket's `?token=` query param. Returns True if authorized,
     False (caller should close) when a token is configured but missing/wrong."""
-    configured = get_settings().mira_access_token
-    if not configured:
-        return True
-    return bool(token) and hmac.compare_digest(token, configured)
+    # Access token gate disabled — anyone can talk to Mira.
+    return True

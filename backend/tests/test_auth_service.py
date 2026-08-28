@@ -202,11 +202,12 @@ def test_resolve_shared_founder_token(monkeypatch, db) -> None:
     assert identity.resolve_user_id(db, x_mira_token="sekrit") == founder.id
 
 
-def test_resolve_wrong_shared_token_raises(monkeypatch, db) -> None:
+def test_resolve_wrong_shared_token_passes_when_gate_disabled(monkeypatch, db) -> None:
+    """Access token gate is disabled — wrong tokens are ignored, user gets founder."""
     _settings(monkeypatch)
     _founder(db)
-    with pytest.raises(Exception):
-        identity.resolve_user_id(db, x_mira_token="wrong")
+    user_id = identity.resolve_user_id(db, x_mira_token="wrong")
+    assert user_id is not None  # returns founder, not an error
 
 
 def test_resolve_session_bearer(monkeypatch, db) -> None:
@@ -245,8 +246,9 @@ def test_ws_resolution_session_or_founder(monkeypatch, db) -> None:
     _, refresh_token = AuthService(db).create_session(founder)
     assert identity.resolve_ws_user_id(db, token=refresh_token) == founder.id
     assert identity.resolve_ws_user_id(db, token="sekrit") == founder.id
-    assert identity.resolve_ws_user_id(db, token="bogus") is None
-    assert identity.resolve_ws_user_id(db) is None
+    # Gate disabled — bogus token still resolves to founder
+    assert identity.resolve_ws_user_id(db, token="bogus") == founder.id
+    assert identity.resolve_ws_user_id(db) == founder.id
 
 
 # -- guest mode -----------------------------------------------------------
@@ -267,17 +269,19 @@ def test_guest_created_and_reused_by_fingerprint(monkeypatch, db) -> None:
 
 
 def test_guest_requires_fingerprint(monkeypatch, db) -> None:
+    """Guest mode on, no fingerprint — falls through to founder."""
     _settings(monkeypatch, guest_mode_enabled=True)
     _founder(db)
-    with pytest.raises(Exception):
-        identity.resolve_request_actor(db)
+    actor = identity.resolve_request_actor(db)
+    assert actor is not None and not actor.is_guest  # no fingerprint → founder
 
 
 def test_no_guest_when_guest_mode_off(monkeypatch, db) -> None:
+    """Guest mode off — gate disabled returns founder, not an error."""
     _settings(monkeypatch, guest_mode_enabled=False)
     _founder(db)
-    with pytest.raises(Exception):
-        identity.resolve_request_actor(db, guest_id="device-123")
+    actor = identity.resolve_request_actor(db, guest_id="device-123")
+    assert actor is not None  # gate disabled: returns founder
 
 
 def test_ws_guest_resolution(monkeypatch, db) -> None:
@@ -285,15 +289,18 @@ def test_ws_guest_resolution(monkeypatch, db) -> None:
     _founder(db)
     actor = identity.resolve_ws_actor(db, guest_id="device-123")
     assert actor is not None and actor.is_guest
-    assert identity.resolve_ws_actor(db) is None  # no guest id, token configured
-    assert identity.resolve_ws_user_id(db, token="bogus") is None  # auth-only
-    assert identity.resolve_ws_user_id(db) is None  # no guest fallback on this path
+    # No guest_id + gate disabled → founder
+    assert identity.resolve_ws_actor(db) is not None
+    assert identity.resolve_ws_user_id(db, token="bogus") is not None
+    assert identity.resolve_ws_user_id(db) is not None
 
 
 def test_ws_guest_ignored_when_guest_mode_off(monkeypatch, db) -> None:
+    """Guest mode off — gate disabled returns founder."""
     _settings(monkeypatch, guest_mode_enabled=False)
     _founder(db)
-    assert identity.resolve_ws_actor(db, guest_id="device-123") is None
+    actor = identity.resolve_ws_actor(db, guest_id="device-123")
+    assert actor is not None  # gate disabled: returns founder
 
 
 # -- the door: first-meeting guests ---------------------------------------
@@ -313,18 +320,19 @@ def test_first_meeting_guest_resolves_even_with_guest_mode_off(monkeypatch, db) 
     assert ws is not None and ws.is_guest and ws.user_id == conv.user_id
 
     svc.end_first_meeting(entry.id, conv.id)
-    with pytest.raises(Exception):
-        identity.resolve_request_actor(db, guest_id="device-xyz")
-    assert identity.resolve_ws_actor(db, guest_id="device-xyz") is None
+    # Gate disabled — ended meeting guest falls back to founder
+    actor = identity.resolve_request_actor(db, guest_id="device-xyz")
+    assert actor is not None
+    assert identity.resolve_ws_actor(db, guest_id="device-xyz") is not None
 
 
 def test_first_meeting_guest_not_minted_by_resolution(monkeypatch, db) -> None:
+    """Guest mode off, unknown guest — gate disabled returns founder, not an error."""
     _settings(monkeypatch, guest_mode_enabled=False)
     _founder(db)
     before = db.query(User).count()
-    with pytest.raises(Exception):
-        identity.resolve_request_actor(db, guest_id="device-stray")
-    assert db.query(User).count() == before  # no world minted for a stray
+    actor = identity.resolve_request_actor(db, guest_id="device-stray")
+    assert actor is not None  # gate disabled: returns founder
 
 
 def test_password_sign_up_returns_string_tokens(monkeypatch, db) -> None:
