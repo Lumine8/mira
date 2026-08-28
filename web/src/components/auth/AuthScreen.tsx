@@ -138,9 +138,10 @@ export default function AuthScreen({
 
   return (
     <div className="auth">
+      <div className="auth__orb" />
       <div className="auth__card">
         <h1 className="auth__title">Mira</h1>
-        <p className="auth__subtitle">Come sit with her.</p>
+        <p className="auth__subtitle">She remembers you.</p>
         {errorState && (
           <div className="auth__error">
             <span>{errorState}</span>
@@ -154,7 +155,7 @@ export default function AuthScreen({
           <div className="auth__actions">
             {config?.password_enabled && (
               <button className="auth__button auth__button--primary" type="button" onClick={() => setView("password")}>
-                Sign in with password
+                Sign in
               </button>
             )}
             {config?.google_enabled && (
@@ -173,7 +174,7 @@ export default function AuthScreen({
             </button>
             {onOpenServer && (
               <button className="auth__back" type="button" onClick={onOpenServer}>
-                Where is Mira running? →
+                Where is Mira running?
               </button>
             )}
           </div>
@@ -186,7 +187,7 @@ export default function AuthScreen({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="Email"
               autoFocus
             />
             <input
@@ -203,7 +204,7 @@ export default function AuthScreen({
               Sign in
             </button>
             <button className="auth__back" type="button" onClick={() => { setView("start"); resetForm(); }}>
-              ← Back
+              Back
             </button>
           </div>
         )}
@@ -223,14 +224,14 @@ export default function AuthScreen({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="Email"
             />
             <input
               className="auth__input"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password (at least 8 characters)"
+              placeholder="Password (8+ characters)"
             />
             <input
               className="auth__input"
@@ -252,7 +253,7 @@ export default function AuthScreen({
               </button>
             </p>
             <button className="auth__back" type="button" onClick={() => { setView("start"); resetForm(); }}>
-              ← Back
+              Back
             </button>
           </div>
         )}
@@ -261,7 +262,7 @@ export default function AuthScreen({
           <div className="auth__panel">
             {emailSent ? (
               <>
-                <p className="auth__hint">Check your email for a code to enter below.</p>
+                <p className="auth__hint">Check your email for a code.</p>
                 <input
                   className="auth__input"
                   type="text"
@@ -284,7 +285,7 @@ export default function AuthScreen({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder="Email"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") sendMagicLink();
@@ -296,7 +297,7 @@ export default function AuthScreen({
               </>
             )}
             <button className="auth__back" type="button" onClick={() => { setView("start"); resetForm(); }}>
-              ← Back
+              Back
             </button>
           </div>
         )}

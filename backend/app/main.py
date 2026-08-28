@@ -145,11 +145,7 @@ def create_app() -> FastAPI:
     # fetches (nginx used to strip that prefix). Serving both means the backend
     # can stand alone on one port with no proxy in front.
     app.include_router(api_router)
-    if settings.is_sqlite:
-        # Native single-port mode: the web bundle fetches /api/... (in docker
-        # the nginx proxy stripped that prefix). Alias the router so the
-        # backend can stand alone on one port with no proxy in front.
-        app.include_router(api_router, prefix="/api")
+    app.include_router(api_router, prefix="/api")
 
     if not settings.is_sqlite:
         return app
