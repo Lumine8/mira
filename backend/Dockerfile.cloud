@@ -11,12 +11,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir --no-deps . || true
-RUN pip install --no-cache-dir \
-    fastapi "uvicorn[standard]" websockets sqlalchemy psycopg2-binary pgvector \
-    alembic pydantic pydantic-settings email-validator httpx \
-    cairosvg Pillow pypdf python-multipart python-docx reportlab \
-    PyJWT bcrypt httptools
+RUN pip install --no-cache-dir . \
+    && pip uninstall -y spacy en-core-web-sm en-core-web-md 2>/dev/null; true
 
 COPY . .
 
