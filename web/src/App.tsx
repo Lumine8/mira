@@ -186,9 +186,7 @@ export default function App() {
           config={session.config}
           error={session.authError}
           onSignIn={session.signInWithToken}
-          onStartGuest={session.startGuest}
           onDismissError={session.clearAuthError}
-          onSecret={secret.openRoom}
           onOpenServer={() => setServerOpen(true)}
         />
         <SecretRoom open={secret.open} onClose={secret.closeRoom} />
