@@ -611,7 +611,6 @@ arc.
 | Abuse prevention | Sliding window scoring (0-100), moderation v2 |
 | Worker model | Job queue with SELECT FOR UPDATE SKIP LOCKED |
 | Scope | Experimental flags (host commands, self-edit, X, video) |
-| Age gate | 18+ configurable minimum age, founder-exempt |
 | Moderation | Rule-based + LLM judge + abuse scoring, founder review |
 | Economics | Razorpay billing (free/founding/continuity), usage tracking |
 | Research | Structured findings with source citations, not narration |

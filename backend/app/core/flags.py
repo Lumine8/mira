@@ -56,7 +56,7 @@ MINIMUM_AGE = 16
 def age_gate_required() -> bool:
     """When on, new users must confirm they are at least MINIMUM_AGE before
     their first conversation. The founder is exempt."""
-    val = os.environ.get("MIRA_AGE_GATE", "1")
+    val = os.environ.get("MIRA_AGE_GATE", "0")
     return _is_truthy(val)
 
 

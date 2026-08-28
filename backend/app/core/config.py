@@ -430,7 +430,7 @@ class Settings(BaseSettings):
     worker_mode: bool = False
 
     # Phase 4 age gate: new users must confirm age before first conversation
-    age_gate_enabled: bool = True
+    age_gate_enabled: bool = False
     minimum_age: int = 18
 
     # Phase 4 data disclosures
