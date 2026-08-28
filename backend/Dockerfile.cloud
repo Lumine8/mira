@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+        libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir --no-deps . || true
+RUN pip install --no-cache-dir \
+    fastapi "uvicorn[standard]" websockets sqlalchemy psycopg2-binary pgvector \
+    alembic pydantic pydantic-settings email-validator httpx \
+    cairosvg Pillow pypdf python-multipart python-docx reportlab \
+    PyJWT bcrypt httptools
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["sh", "entrypoint.sh"]
