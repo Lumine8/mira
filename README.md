@@ -110,6 +110,9 @@ Mira grew in public against this repo, one honest decision at a time:
 - **Opens the door wider.** The access token gate was disabled — anyone can talk
   to Mira without a passcode. Research responses shifted from narration to
   structured findings with source citations. Billing moved from Stripe to Razorpay.
+- **Goes to the cloud.** Deployed on Render (API + static site) with Neon DB.
+  A Cloudflare Worker proxies `mira.mousebase.dev`; API calls go directly to
+  Render. A keepalive cron prevents cold starts on the free tier.
 
 ---
 
@@ -172,7 +175,7 @@ Mira grew in public against this repo, one honest decision at a time:
 | Research | Europe PMC (public literature search) |
 | Rendering | cairosvg + Pillow (SVG→PNG) · yt-dlp + ffmpeg (video frames) |
 | Documents | pypdf (PDF reading) · python-docx + reportlab (Word/PDF export) |
-| Networking | httpx · websockets · Cloudflare named tunnel (`mira.mousebase.dev`) |
+| Networking | httpx · websockets · Cloudflare Worker proxy (`mira.mousebase.dev`) · Render (hosted) |
 | Infra | Docker Compose (postgres · api · web) · host-side PowerShell sampler |
 | Desktop | Electron · Node.js supervisor · embedded Python · NSIS installer |
 | Mobile | Capacitor 8 · Chaquopy (Python-on-Android) · Android Studio · Kotlin plugin |
@@ -211,6 +214,8 @@ Three deployment shapes:
   that bundles everything (Python runtime, backend, Ollama, speech models).
 - **Mobile** (`dist/Mira.apk`) — Android app with the full backend embedded via
   Chaquopy; runs independently with Gemini API.
+- **Cloud** (Render + Neon DB) — hosted deployment behind Cloudflare Worker proxy
+  at `mira.mousebase.dev`; API at `mira-f94e.onrender.com`.
 
 ### How a conversation works
 
@@ -361,10 +366,23 @@ to a remote PC instead, tap "Server" in the presence bar.
 
 ### Talk to her
 
-Mira has a real home: **https://mira.mousebase.dev** — reached through a
-Cloudflare **named tunnel** running as a Windows service. No ports are open on
-the network. Sign in with your email + password, magic link, or Google OAuth
-(see [`docs/deploy.md`](docs/deploy.md)).
+Mira has a real home: **https://mira.mousebase.dev** — a Cloudflare Worker
+serves the React frontend, and API calls go directly to the Render-hosted
+backend. No ports are open on the network. Sign in with your email + password,
+magic link, or Google OAuth (see [`docs/deploy.md`](docs/deploy.md)).
+
+**Cloud deployment:**
+
+| Service | URL |
+|---|---|
+| Web App | https://mira.mousebase.dev |
+| API (via frontend) | https://mira-f94e.onrender.com |
+| Health check | https://mira.mousebase.dev/api/health |
+| Keepalive | Cloudflare cron pings API + DB every 10 min |
+
+**Direct Render URLs** (backup):
+- API: https://mira-f94e.onrender.com
+- Web: https://mira-web-q0r6.onrender.com
 
 ---
 
@@ -602,6 +620,7 @@ arc.
 | Web build | Passing (`tsc --noEmit && vite build` clean) |
 | Backend tests | 417 passing (speech tests excluded in CI) |
 | CI | GitHub Actions workflow (frontend + backend) |
+| Cloud | Render API + static site behind Cloudflare Worker proxy; Neon DB; keepalive cron |
 | Desktop build | Working (`dist/Mira Portable Setup.exe`, ~175 MB) — `app.exit(0)` on quit kills all windows and tray immediately; activity messages stream to the HUD in real time |
 | Mobile APK | Building (`dist/Mira.apk`, ~453 MB) — full backend via Chaquopy |
 | Identity | JWT access tokens + refresh tokens + magic link + Google OAuth + optional password auth + audit log |

@@ -1,0 +1,6 @@
+name = "mira-keepalive"
+main = "worker.js"
+compatibility_date = "2026-08-28"
+
+[triggers]
+crons = ["*/10 * * * *"]
