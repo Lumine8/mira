@@ -51,6 +51,7 @@ export default function App() {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
   const [serverOpen, setServerOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const lastInjected = useRef<string | null>(null);
   // The quiet door: three backticks anywhere, or three presses of the door's
   // warm light. No link leads here — it is not advertised, only known.
@@ -248,11 +249,113 @@ export default function App() {
         isFounder={isFounder}
         moderationOpen={moderationOpen}
         onToggleModeration={() => setModerationOpen((v) => !v)}
-        onOpenSkills={() => setView("skills")}
-        onOpenDocuments={() => setView("documents")}
+        onOpenSkills={() => { setView("skills"); setMobileNavOpen(false); }}
+        onOpenDocuments={() => { setView("documents"); setMobileNavOpen(false); }}
         onSignOut={() => void session.signOut()}
-        onOpenServer={() => setServerOpen(true)}
+        onOpenServer={() => { setServerOpen(true); setMobileNavOpen(false); }}
+        onToggleMobileNav={() => setMobileNavOpen((v) => !v)}
       />
+
+      <div className={`mobile-nav__backdrop ${mobileNavOpen ? "mobile-nav__backdrop--open" : ""}`} onClick={() => setMobileNavOpen(false)} />
+      <nav className={`mobile-nav ${mobileNavOpen ? "mobile-nav--open" : ""}`}>
+        <div className="mobile-nav__head">
+          <div className="mobile-nav__brand">
+            <span className="mobile-nav__logo">Mira</span>
+            <span className="mobile-nav__presence-dot" />
+          </div>
+          <button className="mobile-nav__close" type="button" onClick={() => setMobileNavOpen(false)}>
+            &times;
+          </button>
+        </div>
+
+        <div className="mobile-nav__section">Navigate</div>
+        <button
+          className={`mobile-nav__item ${view === "home" ? "mobile-nav__item--active" : ""}`}
+          type="button"
+          onClick={() => { setView("home"); setMobileNavOpen(false); }}
+        >
+          <span className="mobile-nav__icon">&#9673;</span>
+          Home
+        </button>
+        <button
+          className={`mobile-nav__item ${view === "messages" ? "mobile-nav__item--active" : ""}`}
+          type="button"
+          onClick={() => { setView("messages"); void messages.focus(); setMobileNavOpen(false); }}
+        >
+          <span className="mobile-nav__icon">&#9993;</span>
+          Messages
+        </button>
+        <button
+          className={`mobile-nav__item ${view === "skills" ? "mobile-nav__item--active" : ""}`}
+          type="button"
+          onClick={() => { setView("skills"); setMobileNavOpen(false); }}
+        >
+          <span className="mobile-nav__icon">&#9881;</span>
+          Skills
+        </button>
+        <button
+          className={`mobile-nav__item ${view === "documents" ? "mobile-nav__item--active" : ""}`}
+          type="button"
+          onClick={() => { setView("documents"); setMobileNavOpen(false); }}
+        >
+          <span className="mobile-nav__icon">&#9998;</span>
+          Papers
+        </button>
+
+        {isFounder && (
+          <>
+            <div className="mobile-nav__section">Admin</div>
+            <button
+              className={`mobile-nav__item ${archiveOpen ? "mobile-nav__item--active" : ""}`}
+              type="button"
+              onClick={() => { setArchiveOpen((v) => !v); setMobileNavOpen(false); }}
+            >
+              <span className="mobile-nav__icon">&#9776;</span>
+              Archive
+            </button>
+            <button
+              className={`mobile-nav__item ${moderationOpen ? "mobile-nav__item--active" : ""}`}
+              type="button"
+              onClick={() => { setModerationOpen((v) => !v); setMobileNavOpen(false); }}
+            >
+              <span className="mobile-nav__icon">&#9888;</span>
+              The Door
+            </button>
+            <button
+              className={`mobile-nav__item ${permsOpen ? "mobile-nav__item--active" : ""}`}
+              type="button"
+              onClick={() => { setPermsOpen((v) => !v); setMobileNavOpen(false); }}
+            >
+              <span className="mobile-nav__icon">&#10003;</span>
+              Consent
+            </button>
+            <button
+              className="mobile-nav__item"
+              type="button"
+              onClick={() => { setServerOpen(true); setMobileNavOpen(false); }}
+            >
+              <span className="mobile-nav__icon">&#9881;</span>
+              Server
+            </button>
+          </>
+        )}
+
+        <div className="mobile-nav__spacer" />
+
+        <div className="mobile-nav__foot">
+          {session.identity?.name && (
+            <div className="mobile-nav__who">{session.identity.name}</div>
+          )}
+          <button
+            className="mobile-nav__item"
+            type="button"
+            onClick={() => void session.signOut()}
+          >
+            <span className="mobile-nav__icon">&#10140;</span>
+            Sign out
+          </button>
+        </div>
+      </nav>
 
       <main className="stage">
         {view === "home" ? (

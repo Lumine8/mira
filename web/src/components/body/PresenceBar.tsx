@@ -17,6 +17,7 @@ interface Props {
   onOpenDocuments: () => void;
   onSignOut: () => void;
   onOpenServer?: () => void;
+  onToggleMobileNav?: () => void;
 }
 
 const SEGMENTS = 5;
@@ -32,11 +33,16 @@ function Segmented({ presence }: { presence: Presence }) {
   );
 }
 
-export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms, identity, isFounder, moderationOpen, onToggleModeration, onOpenSkills, onOpenDocuments, onSignOut, onOpenServer }: Props) {
+export default function PresenceBar({ connected, thinking, state, archiveOpen, onToggleArchive, permsOpen, onTogglePerms, identity, isFounder, moderationOpen, onToggleModeration, onOpenSkills, onOpenDocuments, onSignOut, onOpenServer, onToggleMobileNav }: Props) {
   const presence = derivePresence(state, { thinking, connected });
   const who = identity?.name ? (identity.role === "founder" ? identity.name : identity.name) : "You";
   return (
     <header className="presence">
+      <button className="presence__hamburger" type="button" onClick={onToggleMobileNav} aria-label="Menu">
+        <span />
+        <span />
+        <span />
+      </button>
       <div className="presence__identity">
         <span className="presence__name">Mira</span>
         <Segmented presence={presence} />

@@ -23,11 +23,15 @@
   }
 
   // Presence bar: keep identity + state visible, drop the hover-caption
-  // (nothing to hover on a touchscreen), grow the pill buttons for thumbs.
+  // (nothing to hover on a touchscreen), show hamburger instead of pills.
   .presence {
     gap: 10px;
     padding: 0 14px;
     height: calc(var(--presence-h, 52px) + env(safe-area-inset-top, 0px));
+
+    &__hamburger {
+      display: flex;
+    }
 
     &__name {
       font-size: 12px;
@@ -46,12 +50,7 @@
     }
 
     &__toggles {
-      gap: 6px;
-    }
-
-    &__archive {
-      padding: 8px 12px;
-      min-height: 36px;
+      display: none;
     }
   }
 
@@ -158,6 +157,67 @@
   .self-banner {
     width: calc(100vw - 24px);
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  // Documents: single column, tighter padding
+  .documents {
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+
+    &__title {
+      font-size: 22px;
+    }
+
+    &__grid {
+      grid-template-columns: 1fr;
+    }
+
+    &__page {
+      padding: 14px 16px;
+    }
+  }
+
+  .docviewer {
+    &__panel {
+      width: 100%;
+    }
+
+    &__head {
+      padding: 14px 16px 12px;
+    }
+
+    &__body {
+      padding: 14px 16px 28px;
+    }
+  }
+
+  .docpop {
+    padding: 12px;
+
+    &__card {
+      width: 100%;
+      max-height: 92vh;
+    }
+
+    &__body {
+      padding: 18px 18px 28px;
+    }
+  }
+
+  // Skills: single column, tighter padding
+  .skills {
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+
+    &__title {
+      font-size: 22px;
+    }
+  }
+
+  .serverpop {
+    padding: 12px;
+
+    &__card {
+      width: 100%;
+    }
   }
 
   // Browser mini-panel: near full-bleed instead of a floating bottom-right card.
