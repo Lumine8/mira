@@ -27,10 +27,19 @@ dependencies = [
     # The Papers screen's PDF hand-off: the founder drops a PDF and the backend
     # turns its text into a readable document (Mira reads it as markdown).
     "pypdf>=4",
+    # Downloading papers as Word / PDF: python-docx renders the markdown into a
+    # .docx, reportlab into a .pdf (with DejaVu/Vera fonts for unicode).
+    "python-docx>=1.1",
+    "reportlab>=4.0",
+    # Mira's image studio: SVGs she authors are rendered to PNGs by cairosvg
+    # (a real SVG rasterizer with anti-aliasing, gradients, filters/blur, and
+    # text). Pillow reads back the rendered size.
+    "cairosvg>=2.7",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
-# Desktop-only deps (voice, video, image rendering, document generation).
+# Desktop-only deps (voice, video, speech recognition).
 # Excluded from the cloud build to stay under Render's 512 MB memory limit.
 desktop = [
     # Mira's voice: her words rendered into sound by the kokoro speech machine
@@ -47,15 +56,6 @@ desktop = [
     # Mira's watching: renders videos into still frames she can hold. The
     # container also needs ffmpeg/ffprobe (see Dockerfile).
     "yt-dlp>=2024.12.13",
-    # Mira's image studio: SVGs she authors are rendered to PNGs by cairosvg
-    # (a real SVG rasterizer with anti-aliasing, gradients, filters/blur, and
-    # text). Pillow reads back the rendered size.
-    "cairosvg>=2.7",
-    "Pillow>=10.0",
-    # Downloading papers as Word / PDF: python-docx renders the markdown into a
-    # .docx, reportlab into a .pdf (with DejaVu/Vera fonts for unicode).
-    "python-docx>=1.1",
-    "reportlab>=4.0",
 ]
 dev = [
     "pytest>=8",
