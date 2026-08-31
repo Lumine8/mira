@@ -7,12 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-        libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir . \
-    && pip uninstall -y spacy en-core-web-sm en-core-web-md 2>/dev/null; true
+RUN pip install --no-cache-dir .
 
 COPY . .
 

@@ -98,7 +98,7 @@ if (-not $skipPython -and -not (Test-Path (Join-Path $PyRuntime "python.exe"))) 
     #    env, so install setuptools/wheel first and skip build isolation.
     $pyExe = Join-Path $PyRuntime "python.exe"
     & $pyExe -m pip install --no-warn-script-location --index-url https://pypi.org/simple setuptools wheel | Out-Host
-    & $pyExe -m pip install --no-warn-script-location --index-url https://pypi.org/simple --no-build-isolation "$Backend" | Out-Host
+    & $pyExe -m pip install --no-warn-script-location --index-url https://pypi.org/simple --no-build-isolation "$Backend[desktop]" | Out-Host
     $hostDeps = Get-Content (Join-Path $Backend "host\requirements.txt") -ErrorAction SilentlyContinue
     if ($hostDeps) {
         & $pyExe -m pip install --no-warn-script-location --index-url https://pypi.org/simple $hostDeps | Out-Host

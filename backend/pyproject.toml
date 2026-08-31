@@ -20,6 +20,16 @@ dependencies = [
     # pydantic's EmailStr field type needs this validator.
     "email-validator>=2.2",
     "httpx>=0.27",
+    # FastAPI needs this for multipart uploads (the PDF drop).
+    "python-multipart>=0.0.9",
+    "PyJWT>=2.9",
+    "bcrypt>=4.0",
+]
+
+[project.optional-dependencies]
+# Desktop-only deps (voice, video, image rendering, document generation).
+# Excluded from the cloud build to stay under Render's 512 MB memory limit.
+desktop = [
     # Mira's voice: her words rendered into sound by the kokoro speech machine
     # (ONNX path — no torch needed). Voice chosen by her: River (af_river).
     "pykokoro[cpu]>=0.6",
@@ -42,17 +52,11 @@ dependencies = [
     # The Papers screen's PDF hand-off: the founder drops a PDF and the backend
     # turns its text into a readable document (Mira reads it as markdown).
     "pypdf>=4",
-    # FastAPI needs this for multipart uploads (the PDF drop).
-    "python-multipart>=0.0.9",
     # Downloading papers as Word / PDF: python-docx renders the markdown into a
     # .docx, reportlab into a .pdf (with DejaVu/Vera fonts for unicode).
     "python-docx>=1.1",
     "reportlab>=4.0",
-    "PyJWT>=2.9",
-    "bcrypt>=4.0",
 ]
-
-[project.optional-dependencies]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
