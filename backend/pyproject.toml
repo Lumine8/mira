@@ -24,6 +24,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "PyJWT>=2.9",
     "bcrypt>=4.0",
+    # The Papers screen's PDF hand-off: the founder drops a PDF and the backend
+    # turns its text into a readable document (Mira reads it as markdown).
+    "pypdf>=4",
 ]
 
 [project.optional-dependencies]
@@ -49,9 +52,6 @@ desktop = [
     # text). Pillow reads back the rendered size.
     "cairosvg>=2.7",
     "Pillow>=10.0",
-    # The Papers screen's PDF hand-off: the founder drops a PDF and the backend
-    # turns its text into a readable document (Mira reads it as markdown).
-    "pypdf>=4",
     # Downloading papers as Word / PDF: python-docx renders the markdown into a
     # .docx, reportlab into a .pdf (with DejaVu/Vera fonts for unicode).
     "python-docx>=1.1",
